@@ -54,6 +54,23 @@ window.cycleTheme = function () {
   applyTheme(next);
 };
 
+
+window.openAgentMonitor = async function () {
+  if (!window.miar?.openAgentMonitor) {
+    alert('Monitor de agente não disponível no momento.');
+    return;
+  }
+  try {
+    const result = await window.miar.openAgentMonitor();
+    if (!result?.ok) {
+      alert('Não foi possível abrir o monitor do agente. Verifique a instalação do backend.');
+    }
+  } catch (error) {
+    console.error('Falha ao abrir monitor do agente:', error);
+    alert('Erro ao abrir o monitor do agente. Veja o console para mais detalhes.');
+  }
+};
+
 // ── CLOCK HH:MM:SS ────────────────────────────────────────────────────────────
 function startClock() {
   function tick() {
@@ -679,13 +696,9 @@ async function toggleMic() {
   }
 
   if (state.speechRecognition) {
-    try {
-      state.speechRecognition.start();
-      return;
-    } catch (err) {
-      setMicStatus(`Erro de voz: ${err.message}`);
-      return;
-    }
+    // Evita usar o SpeechRecognition nativo no Electron, pois ele pode encerrar
+    // sem transcrever nada e fazer o botão sumir sem resultado.
+    state.speechRecognition = null;
   }
 
   if (state.isListening) {
@@ -1026,6 +1039,7 @@ function setupEventListeners() {
   msgInput.addEventListener('input', function () { autoResizeTextarea(this); });
 
   document.getElementById('toggle-sidebar').addEventListener('click', () => document.getElementById('sidebar').classList.toggle('collapsed'));
+  document.getElementById('agent-monitor-btn').addEventListener('click', window.openAgentMonitor);
   document.getElementById('settings-btn').addEventListener('click', window.openSettingsModal);
   // maintenance-btn foi movido para dentro do modal de settings
   document.getElementById('attach-btn').addEventListener('click', handleAttach);

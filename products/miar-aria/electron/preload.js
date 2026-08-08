@@ -60,6 +60,9 @@ contextBridge.exposeInMainWorld('miar', {
   // Abortar requisição de IA em andamento
   abortRequest: () => ipcRenderer.invoke('ai:abort'),
 
+  // Agent Monitor
+  openAgentMonitor: () => ipcRenderer.invoke('agent:open-monitor'),
+
   // Estatísticas de uso de API
   getUsageStats: () => ipcRenderer.invoke('ai:get-usage-stats'),
 });

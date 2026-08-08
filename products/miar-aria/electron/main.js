@@ -1,4 +1,5 @@
 const { app, BrowserWindow, ipcMain, dialog, Menu, session } = require('electron');
+const { spawn } = require('child_process');
 const path = require('path');
 
 const aiHandler          = require('./ai-handler');
@@ -54,9 +55,69 @@ function createWindow() {
   Menu.setApplicationMenu(null);
 }
 
+let agentBackendProcess = null;
+
+function startAgentBackend() {
+  if (agentBackendProcess) return;
+  const backendPath = path.join(__dirname, '..', '..', '..', 'ai-agent-monitor', 'backend', 'agent_server.py');
+  const cwd = path.dirname(backendPath);
+  const pythonCmd = process.platform === 'win32' ? 'python' : 'python3';
+  const python = process.env.PYTHON_PATH || process.env.PYTHON || pythonCmd;
+
+  try {
+    agentBackendProcess = spawn(python, [backendPath], {
+      cwd,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env: { ...process.env, PYTHONUNBUFFERED: '1' },
+    });
+
+    agentBackendProcess.stdout.on('data', (chunk) => {
+      console.log(`[agent-backend] ${chunk.toString().trim()}`);
+    });
+    agentBackendProcess.stderr.on('data', (chunk) => {
+      console.error(`[agent-backend] ${chunk.toString().trim()}`);
+    });
+    agentBackendProcess.on('exit', (code, signal) => {
+      console.log(`[agent-backend] exited code=${code} signal=${signal}`);
+      agentBackendProcess = null;
+    });
+  } catch (error) {
+    console.error('Erro ao iniciar backend do agent monitor:', error);
+    agentBackendProcess = null;
+  }
+}
+
+function stopAgentBackend() {
+  if (!agentBackendProcess) return;
+  try {
+    agentBackendProcess.kill();
+  } catch (error) {
+    console.error('Erro ao parar backend do agent monitor:', error);
+  }
+  agentBackendProcess = null;
+}
+
+function createAgentMonitorWindow() {
+  const monitorWindow = new BrowserWindow({
+    width: 1400,
+    height: 920,
+    title: 'MIAR ÁRIA — Agent Monitor',
+    icon: path.join(__dirname, '..', 'build', 'icon.png'),
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  });
+  monitorWindow.loadFile(path.join(__dirname, '..', '..', '..', 'ai-agent-monitor', 'frontend', 'index.html'));
+  monitorWindow.on('closed', () => {});
+  return monitorWindow;
+}
+
 app.whenReady().then(() => {
   storageHandler.init();
   memoryHandler.init();
+  startAgentBackend();
   createWindow();
 
   // ── Auto-updater ─────────────────────────────────────────────────────────
@@ -93,6 +154,10 @@ app.whenReady().then(() => {
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
+});
+
+app.on('before-quit', () => {
+  stopAgentBackend();
 });
 
 app.on('window-all-closed', () => {
@@ -133,6 +198,12 @@ ipcMain.handle('whisper:transcribe', async (_e, buffer, mimeType) => {
 ipcMain.handle('ai:send-message', async (event, { messages, conversationId, attachments, memories, customInstructions }) => {
   const sysInfo = systemHandler.getSystemInfo();
   return await aiHandler.sendMessage(messages, conversationId, attachments, memories, sysInfo, customInstructions);
+});
+
+ipcMain.handle('agent:open-monitor', async () => {
+  startAgentBackend();
+  createAgentMonitorWindow();
+  return { ok: true };
 });
 
 // ── SYSTEM / WINDOWS ──────────────────────────────────────────────────────────
