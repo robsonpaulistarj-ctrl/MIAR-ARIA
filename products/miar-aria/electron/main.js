@@ -8,6 +8,7 @@ const fileHandler        = require('./file-handler');
 const maintenanceHandler = require('./maintenance-handler');
 const memoryHandler      = require('./memory-handler');
 const systemHandler      = require('./system-handler');
+const cameraHandler      = require('./camera-handler');
 
 // ── Flags Chromium — necessário para Web Speech API + microfone ───────────────
 app.commandLine.appendSwitch('enable-speech-dispatcher');
@@ -193,6 +194,26 @@ ipcMain.handle('whisper:transcribe', async (_e, buffer, mimeType) => {
   return await aiHandler.transcribeWithWhisper(Buffer.from(buffer), mimeType);
 });
 
+// ── CÂMERA ────────────────────────────────────────────────────────────────────
+ipcMain.handle('camera:capture', async () => {
+  return cameraHandler.getCameras();
+});
+
+// ── STREAMING IA ──────────────────────────────────────────────────────────────
+ipcMain.handle('ai:send-stream', async (event, { messages, conversationId, attachments, memories, customInstructions }) => {
+  const sysInfo = systemHandler.getSystemInfo();
+  try {
+    const result = await aiHandler.sendMessageStream(messages, conversationId, attachments, memories, sysInfo, customInstructions, (chunk) => {
+      mainWindow?.webContents.send('ai:stream', { type: 'chunk', text: chunk });
+    });
+    mainWindow?.webContents.send('ai:stream', { type: 'done', ...result });
+    return result;
+  } catch (err) {
+    mainWindow?.webContents.send('ai:stream', { type: 'error', error: err.message });
+    return { ok: false, error: err.message };
+  }
+});
+
 // ── AI ────────────────────────────────────────────────────────────────────────
 
 ipcMain.handle('ai:send-message', async (event, { messages, conversationId, attachments, memories, customInstructions }) => {
@@ -240,6 +261,7 @@ ipcMain.handle('storage:get-conversation', async (e, id) => storageHandler.getCo
 ipcMain.handle('storage:create-conversation', async (e, title) => storageHandler.createConversation(title));
 ipcMain.handle('storage:save-message', async (e, p) => storageHandler.saveMessage(p.conversationId, p.role, p.content, p.attachments));
 ipcMain.handle('storage:update-conversation-title', async (e, p) => storageHandler.updateConversationTitle(p.id, p.title));
+ipcMain.handle('storage:update-conversation-color', async (e, p) => storageHandler.updateConversationColor(p.id, p.color));
 ipcMain.handle('storage:delete-conversation', async (e, id) => storageHandler.deleteConversation(id));
 ipcMain.handle('storage:search-conversations', async (e, q) => storageHandler.searchConversations(q));
 ipcMain.handle('storage:get-last-conversation-id', async () => storageHandler.getLastConversationId());

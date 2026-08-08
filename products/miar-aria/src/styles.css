@@ -48,6 +48,25 @@ html, body {
   font-size: 14px; line-height: 1.6;
 }
 
+/* ── Botões arrastáveis (drag & drop) ── */
+.icon-btn.draggable {
+  cursor: grab;
+  user-select: none;
+  transition: transform 0.1s, box-shadow 0.1s;
+}
+.icon-btn.draggable:hover {
+  transform: scale(1.05);
+  box-shadow: 0 0 8px var(--accent);
+}
+.icon-btn.draggable.dragging {
+  cursor: grabbing;
+  opacity: 0.7;
+  transform: scale(1.1);
+}
+.icon-btn.dragged-over {
+  border: 2px dashed var(--accent2) !important;
+}
+
 #app { display: flex; height: 100vh; overflow: hidden; }
 
 /* ── SIDEBAR ── */

@@ -20,6 +20,7 @@ const state = {
   speechRecognition: null,
   voiceInputActive: false,
   voices: [],
+  _streamingActive: false,
 };
 
 // ── TEMA DIA / NOITE / SISTEMA ────────────────────────────────────────────────
@@ -150,9 +151,13 @@ function loadVoices() {
   if (!sel) return;
   const saved = sel.value;
   sel.innerHTML = '';
-  const ptVoices = state.voices.filter(v => v.lang.startsWith('pt'));
-  const others = state.voices.filter(v => !v.lang.startsWith('pt'));
-  for (const v of [...ptVoices, ...others]) {
+  // Filtrar apenas vozes femininas (nomes que sugerem feminino)
+  const femaleNames = /francisca|maria|vitoria|vitória|fernanda|ana|lucia|bianca|juliana|carolina|helena|isabela|sophia|camila|letícia|leticia|amanda|rafaela|thais|tais|beatriz|paula|laura|mariana|daniela|patricia|adriana|cristina|sabrina|michelle|nicole|andrea|clara|alice|elisa|serena|victoria|samantha|monica|karen|susan|google|zira|sarah|jenny|aria|emma/i;
+  const ptVoices = state.voices.filter(v => v.lang.startsWith('pt') && femaleNames.test(v.name));
+  const ptAll = state.voices.filter(v => v.lang.startsWith('pt'));
+  const allFemale = state.voices.filter(v => femaleNames.test(v.name));
+  const displayVoices = ptVoices.length > 0 ? ptVoices : (ptAll.length > 0 ? ptAll : (allFemale.length > 0 ? allFemale : state.voices));
+  for (const v of displayVoices) {
     const opt = document.createElement('option');
     opt.value = v.name;
     opt.textContent = `${v.name} (${v.lang})`;
@@ -166,11 +171,15 @@ function loadVoices() {
   }
 }
 
+let _currentUtterance = null;
+let _ttsPaused = false;
+
 function speak(text) {
   if (!state.ttsEnabled || !window.speechSynthesis) return;
   speechSynthesis.cancel();
+  _ttsPaused = false;
   const clean = text.replace(/```[\s\S]*?```/g, 'código omitido').replace(/[*_#`~]/g, '');
-  const utter = new SpeechSynthesisUtterance(clean.substring(0, 800));
+  const utter = new SpeechSynthesisUtterance(clean.substring(0, 2000));
   utter.lang = 'pt-BR';
   utter.rate = state.ttsRate;
   utter.pitch = state.ttsPitch;
@@ -179,17 +188,47 @@ function speak(text) {
     const v = state.voices.find(x => x.name === voiceName);
     if (v) utter.voice = v;
   }
-  const stopBtn = document.getElementById('stop-tts-btn');
-  if (stopBtn) stopBtn.style.display = 'inline-flex';
-  utter.onend = () => { if (stopBtn) stopBtn.style.display = 'none'; };
-  utter.onerror = () => { if (stopBtn) stopBtn.style.display = 'none'; };
+  _currentUtterance = utter;
+  updateTtsPauseBtn();
+  utter.onend = () => { _currentUtterance = null; _ttsPaused = false; updateTtsPauseBtn(); };
+  utter.onerror = () => { _currentUtterance = null; _ttsPaused = false; updateTtsPauseBtn(); };
   speechSynthesis.speak(utter);
 }
 
+function updateTtsPauseBtn() {
+  const btn = document.getElementById('stop-tts-btn');
+  if (!btn) return;
+  if (_currentUtterance) {
+    btn.style.display = 'inline-flex';
+    if (_ttsPaused) {
+      btn.textContent = '▶️ Continuar';
+      btn.title = 'Continuar fala';
+    } else {
+      btn.textContent = '⏸ Pausar';
+      btn.title = 'Pausar fala (clique de novo para parar)';
+    }
+  } else {
+    btn.style.display = 'none';
+  }
+}
+
+window.togglePauseSpeech = function () {
+  if (!_currentUtterance) return;
+  if (_ttsPaused) {
+    speechSynthesis.resume();
+    _ttsPaused = false;
+  } else {
+    speechSynthesis.pause();
+    _ttsPaused = true;
+  }
+  updateTtsPauseBtn();
+};
+
 window.stopSpeech = function () {
   speechSynthesis.cancel();
-  const stopBtn = document.getElementById('stop-tts-btn');
-  if (stopBtn) stopBtn.style.display = 'none';
+  _currentUtterance = null;
+  _ttsPaused = false;
+  updateTtsPauseBtn();
 };
 
 // Esc para parar a fala
@@ -335,7 +374,9 @@ function buildConvItem(conv) {
   const item = document.createElement('div');
   item.className = 'conv-item' + (conv.id === state.currentConvId ? ' active' : '');
   const date = new Date(conv.updatedAt).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+  const storyColor = conv.color || 'var(--accent)';
   item.innerHTML = `
+    <span class="conv-item-color" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${storyColor};flex-shrink:0"></span>
     <span class="conv-item-title" title="${escHtml(conv.title)}">${escHtml(conv.title)}</span>
     <span style="display:flex;align-items:center;gap:4px">
       <span class="conv-item-date">${date}</span>
@@ -424,7 +465,10 @@ function appendMessageEl(msg) {
   div.className = `msg ${msg.role}${msg.isError ? ' msg-error' : ''}${msg.isThinking ? ' msg-thinking' : ''}`;
 
   const time = msg.timestamp
-    ? new Date(msg.timestamp).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', hour12: false })
+    ? new Date(msg.timestamp).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
+    : '';
+  const dateFull = msg.timestamp
+    ? new Date(msg.timestamp).toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })
     : '';
   const attachHtml = (msg.attachments || []).length > 0
     ? `<div class="msg-attachments">${msg.attachments.map(a => `<span class="attach-tag">📎 ${escHtml(a.name || a)}</span>`).join('')}</div>`
@@ -436,7 +480,7 @@ function appendMessageEl(msg) {
     ${attachHtml}
     <div class="msg-bubble" id="${msgId}">${formatContent(msg.content || '')}</div>
     <div class="msg-meta">
-      <span class="msg-time">${time}</span>
+      <span class="msg-time" title="${dateFull}">${time}</span>
       ${providerHtml}
       <button class="copy-btn" onclick="copyMsg('${msgId}')" title="Copiar texto">⧉</button>
     </div>`;
@@ -461,6 +505,61 @@ function scrollToBottom() {
   const c = document.getElementById('messages');
   c.scrollTop = c.scrollHeight;
 }
+
+// ── CÂMERA ────────────────────────────────────────────────────────────────────
+let _cameraStream = null;
+
+window.openCameraModal = async function () {
+  try {
+    _cameraStream = await navigator.mediaDevices.getUserMedia({ video: true });
+    const video = document.getElementById('camera-video');
+    if (video) video.srcObject = _cameraStream;
+    openModal('camera-modal');
+  } catch (err) {
+    const msgs = {
+      NotAllowedError: 'Permissão de câmera negada. Ative em Configurações → Privacidade → Câmera.',
+      NotFoundError: 'Nenhuma câmera encontrada.',
+    };
+    alert(msgs[err.name] || `Erro ao acessar câmera: ${err.message}`);
+  }
+};
+
+window.closeCameraModal = function () {
+  closeModal('camera-modal');
+  if (_cameraStream) {
+    _cameraStream.getTracks().forEach(t => t.stop());
+    _cameraStream = null;
+  }
+  const video = document.getElementById('camera-video');
+  if (video) video.srcObject = null;
+};
+
+window.captureFromCamera = async function () {
+  const video = document.getElementById('camera-video');
+  const canvas = document.getElementById('camera-canvas');
+  if (!video || !canvas || !_cameraStream) return;
+
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(video, 0, 0);
+  const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+
+  // Para ao stream
+  window.closeCameraModal();
+
+  // Adiciona como anexo
+  state.attachments.push({
+    name: '📷 captura_camera.jpg',
+    type: 'image/jpeg',
+    content: `[Imagem capturada pela câmera — base64 jpeg]`,
+    dataUrl: dataUrl,
+    isCamera: true,
+  });
+  renderAttachmentsPreview();
+  setMicStatus('📷 Imagem capturada! Escreva o que quer que eu analise.');
+  setTimeout(() => setMicStatus(''), 4000);
+};
 
 // ── SEND MESSAGE ──────────────────────────────────────────────────────────────
 async function sendMessage() {
@@ -505,6 +604,79 @@ async function sendMessage() {
       .slice(-20)
       .map(m => ({ role: m.role, content: m.content }));
 
+    // ── Modo Live (Streaming) — tentar primeiro, fallback para normal ──
+    const USE_STREAMING = true; // Toggle: false para desativar
+
+    if (USE_STREAMING) {
+      try {
+        let streamText = '';
+        let streamDone = false;
+        let streamError = null;
+
+        const onStreamChunk = (data) => {
+          if (data.type === 'chunk') {
+            streamText += data.text;
+            // Atualiza o elemento thinking com o texto acumulando
+            const bubble = thinkingEl.querySelector('.msg-bubble');
+            if (bubble) bubble.textContent = streamText;
+            scrollToBottom();
+          } else if (data.type === 'done') {
+            streamDone = true;
+          } else if (data.type === 'error') {
+            streamError = data.error;
+            streamDone = true;
+          }
+        };
+
+        const unlisten = () => {
+          // Remove o listener após uso
+        };
+
+        // Registra listener temporário
+        const handler = (data) => {
+          if (data.type === 'chunk' && streamText === '' && !streamDone) return;
+          onStreamChunk(data);
+        };
+
+        // Usa o IPC de streaming
+        window.miar.onAiStream((data) => {
+          // Só processa se estamos no modo streaming atual
+          if (state._streamingActive) onStreamChunk(data);
+        });
+
+        state._streamingActive = true;
+        const result = await window.miar.sendStreamMessage({
+          messages: apiMessages,
+          conversationId: state.currentConvId,
+          attachments: allAttachments.filter(a => a.content),
+          memories: relevantMemories,
+          customInstructions: state.customInstructions || '',
+        });
+        state._streamingActive = false;
+
+        if (result?.ok && result.streaming) {
+          // Resposta via streaming — já renderizada em tempo real
+          thinkingEl.remove();
+          const aiMsg = {
+            role: 'assistant',
+            content: result.text,
+            provider: result.provider || '',
+            timestamp: new Date().toISOString(),
+            isError: false,
+          };
+          state.messages.push(aiMsg);
+          appendMessageEl(aiMsg);
+          await window.miar.saveMessage({ conversationId: state.currentConvId, role: 'assistant', content: aiMsg.content, attachments: [] });
+          if (state.ttsEnabled) speak(result.text);
+          await loadConversationList();
+          return; // Sai da função
+        }
+
+        // Se chegou aqui, streaming falhou — usa modo normal
+      } catch {}
+    }
+
+    // ── Modo Normal (sem streaming) ──
     // ── Loop de execução de comandos Windows ──────────────────────────────────
     // A IA pode responder com [CMD: powershell_command] → app executa → devolve resultado → IA continua
     let loopMessages = [...apiMessages];
@@ -607,6 +779,57 @@ async function sendMessage() {
     refreshApiCounter();
     scrollToBottom();
   }
+}
+
+// ── DRAG & DROP NOS BOTÕES ──────────────────────────────────────────────────
+function setupDraggableButtons() {
+  const btns = document.querySelectorAll('#input-row .icon-btn');
+  btns.forEach(btn => {
+    btn.draggable = true;
+    btn.classList.add('draggable');
+
+    btn.addEventListener('dragstart', (e) => {
+      btn.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', btn.id);
+    });
+
+    btn.addEventListener('dragend', () => {
+      btn.classList.remove('dragging');
+      document.querySelectorAll('.dragged-over').forEach(b => b.classList.remove('dragged-over'));
+    });
+
+    btn.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      btn.classList.add('dragged-over');
+    });
+
+    btn.addEventListener('dragleave', () => {
+      btn.classList.remove('dragged-over');
+    });
+
+    btn.addEventListener('drop', (e) => {
+      e.preventDefault();
+      btn.classList.remove('dragged-over');
+      const draggedId = e.dataTransfer.getData('text/plain');
+      if (draggedId === btn.id) return;
+
+      const draggedBtn = document.getElementById(draggedId);
+      if (!draggedBtn) return;
+
+      // Troca a posição
+      const parent = btn.parentElement;
+      const draggedIndex = Array.from(parent.children).indexOf(draggedBtn);
+      const targetIndex = Array.from(parent.children).indexOf(btn);
+
+      if (draggedIndex < targetIndex) {
+        parent.insertBefore(draggedBtn, btn.nextSibling);
+      } else {
+        parent.insertBefore(draggedBtn, btn);
+      }
+    });
+  });
 }
 
 // ── MICROPHONE — Whisper (Groq) via MediaRecorder ────────────────────────────
@@ -1044,7 +1267,11 @@ function setupEventListeners() {
   // maintenance-btn foi movido para dentro do modal de settings
   document.getElementById('attach-btn').addEventListener('click', handleAttach);
   document.getElementById('folder-btn').addEventListener('click', handleFolder);
+  document.getElementById('camera-btn').addEventListener('click', window.openCameraModal);
   document.getElementById('mic-btn').addEventListener('click', toggleMic);
+
+  // ── Drag & Drop nos botões ──
+  setupDraggableButtons();
 
   document.getElementById('tts-btn').addEventListener('click', () => {
     state.ttsEnabled = !state.ttsEnabled;
@@ -1056,10 +1283,22 @@ function setupEventListeners() {
   document.getElementById('conv-title').addEventListener('click', async () => {
     if (!state.currentConvId) return;
     const cur = document.getElementById('conv-title').textContent;
-    const newTitle = prompt('Renomear conversa:', cur);
+    const newTitle = prompt('Renomear história:', cur);
     if (newTitle?.trim()) {
       await window.miar.updateConversationTitle({ id: state.currentConvId, title: newTitle.trim() });
       document.getElementById('conv-title').textContent = newTitle.trim();
+      await loadConversationList();
+    }
+  });
+
+  // Duplo clique no título para mudar cor da história
+  document.getElementById('conv-title').addEventListener('dblclick', async () => {
+    if (!state.currentConvId) return;
+    const colors = ['#27AE60', '#2ECC71', '#3498DB', '#9B59B6', '#E74C3C', '#F39C12', '#1ABC9C', '#E91E63'];
+    const choice = prompt('Escolha uma cor (1-8):\n1: Verde medicina\n2: Verde claro\n3: Azul\n4: Roxo\n5: Vermelho\n6: Laranja\n7: Ciano\n8: Rosa');
+    const idx = parseInt(choice) - 1;
+    if (idx >= 0 && idx < colors.length) {
+      await window.miar.updateConversationColor({ id: state.currentConvId, color: colors[idx] });
       await loadConversationList();
     }
   });
@@ -1097,6 +1336,10 @@ function updateTtsBtn() {
 
 function autoResizeTextarea(el) {
   el.style.height = 'auto';
-  // Sem limite de altura — cresce conforme o conteúdo (uso pessoal)
-  el.style.height = Math.min(el.scrollHeight, 420) + 'px';
+  // Estilo Replit: cresce conforme digita, máx 200px, volta a 1 linha quando vazio
+  if (!el.value.trim()) {
+    el.style.height = 'auto';
+  } else {
+    el.style.height = Math.min(el.scrollHeight, 200) + 'px';
+  }
 }

@@ -14,6 +14,7 @@ contextBridge.exposeInMainWorld('miar', {
   createConversation: (title) => ipcRenderer.invoke('storage:create-conversation', title),
   saveMessage: (p) => ipcRenderer.invoke('storage:save-message', p),
   updateConversationTitle: (p) => ipcRenderer.invoke('storage:update-conversation-title', p),
+  updateConversationColor: (p) => ipcRenderer.invoke('storage:update-conversation-color', p),
   deleteConversation: (id) => ipcRenderer.invoke('storage:delete-conversation', id),
   searchConversations: (q) => ipcRenderer.invoke('storage:search-conversations', q),
   getLastConversationId: () => ipcRenderer.invoke('storage:get-last-conversation-id'),
@@ -62,6 +63,13 @@ contextBridge.exposeInMainWorld('miar', {
 
   // Agent Monitor
   openAgentMonitor: () => ipcRenderer.invoke('agent:open-monitor'),
+
+  // Câmera
+  captureCamera: (source) => ipcRenderer.invoke('camera:capture', source),
+
+  // Streaming de IA (evento)
+  onAiStream: (cb) => ipcRenderer.on('ai:stream', (_e, data) => cb(data)),
+  sendStreamMessage: (p) => ipcRenderer.invoke('ai:send-stream', p),
 
   // Estatísticas de uso de API
   getUsageStats: () => ipcRenderer.invoke('ai:get-usage-stats'),

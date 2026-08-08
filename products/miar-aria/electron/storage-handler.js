@@ -165,10 +165,20 @@ function getConversations() {
   for (const f of files) {
     try {
       const d = readJSON(path.join(conversationsDir, f));
-      list.push({ id: d.id, title: d.title || 'Conversa', createdAt: d.createdAt, updatedAt: d.updatedAt, messageCount: (d.messages || []).length });
+      list.push({ id: d.id, title: d.title || 'Conversa', createdAt: d.createdAt, updatedAt: d.updatedAt, messageCount: (d.messages || []).length, color: d.color || null });
     } catch {}
   }
   return list.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+}
+
+function updateConversationColor(id, color) {
+  const file = path.join(conversationsDir, `${id}.json`);
+  const conv = readJSON(file);
+  if (!conv.id) return { ok: false };
+  conv.color = color;
+  conv.updatedAt = new Date().toISOString();
+  writeJSON(file, conv);
+  return { ok: true };
 }
 
 function getConversation(id) {
@@ -179,7 +189,9 @@ function getConversation(id) {
 function createConversation(title) {
   const id = `conv_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
   const now = new Date().toISOString();
-  const conv = { id, title: title || 'Nova conversa', createdAt: now, updatedAt: now, messages: [] };
+  const colors = ['#27AE60', '#2ECC71', '#3498DB', '#9B59B6', '#E74C3C', '#F39C12', '#1ABC9C', '#E91E63'];
+  const randomColor = colors[Math.floor(Math.random() * colors.length)];
+  const conv = { id, title: title || 'Nova conversa', createdAt: now, updatedAt: now, messages: [], color: randomColor };
   writeJSON(path.join(conversationsDir, `${id}.json`), conv);
   setLastConversationId(id);
   return conv;

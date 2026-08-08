@@ -51,6 +51,7 @@
       <div id="input-row">
         <button class="icon-btn" id="attach-btn" title="Anexar arquivo">📎</button>
         <button class="icon-btn" id="folder-btn" title="Selecionar pasta">📁</button>
+        <button class="icon-btn" id="camera-btn" title="Câmera (IA vê)">📷</button>
         <button class="icon-btn" id="mic-btn" title="Microfone">🎤</button>
         <button class="icon-btn" id="tts-btn" title="Voz ligada/desligada">🔈</button>
         <span id="mic-status"></span>
@@ -82,7 +83,7 @@
       <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
         <button class="btn btn-secondary btn-small" onclick="openMemoryModal()">🧠 Memórias</button>
         <button class="btn btn-secondary btn-small" onclick="window.openMaintenanceModal()">🔧 Manutenção</button>
-        <button id="stop-tts-btn" class="btn btn-secondary btn-small" title="Parar fala (Esc)" onclick="stopSpeech()" style="display:none;color:var(--error)">⏹ Parar fala</button>
+        <button id="stop-tts-btn" class="btn btn-secondary btn-small" title="Pausar/Continuar fala (Esc para parar)" onclick="togglePauseSpeech()" style="display:none;color:var(--error)">⏸ Pausar</button>
       </div>
     </div>
 
@@ -216,6 +217,20 @@
     <div class="modal-footer">
       <button class="btn btn-secondary" onclick="closeModal('settings-modal')">Fechar</button>
       <button class="btn btn-primary" onclick="saveAllSettings()">Salvar configurações</button>
+    </div>
+  </div>
+</div>
+
+<!-- CAMERA MODAL -->
+<div class="modal-overlay hidden" id="camera-modal">
+  <div class="modal" style="width:560px">
+    <h2>📷 Câmera — A IA vai ver</h2>
+    <p style="font-size:12px;color:var(--text3)">Aponte a câmera para o que deseja que a MIAR ÁRIA veja e analise.</p>
+    <video id="camera-video" autoplay playsinline style="width:100%;border-radius:10px;background:#000;margin:8px 0"></video>
+    <canvas id="camera-canvas" style="display:none"></canvas>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeCameraModal()">Cancelar</button>
+      <button class="btn btn-primary" onclick="captureFromCamera()">📸 Capturar e Enviar</button>
     </div>
   </div>
 </div>

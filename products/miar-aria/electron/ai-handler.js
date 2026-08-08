@@ -317,6 +317,145 @@ async function callMistralWithRotation(messages) {
   throw new Error(`Mistral (${keys.length} chave(s)): ${errors.join(' | ')}`);
 }
 
+// ── SEND MESSAGE (STREAMING) ──────────────────────────────────────────────────
+
+async function sendMessageStream(messages, conversationId, attachments, memories, systemInfo, customInstructions, onChunk) {
+  _abortController = new AbortController();
+  const memoryBlock = memories && memories.length > 0
+    ? '\n\nMemórias relevantes do usuário:\n' + memories.map(m => `- ${m.content}`).join('\n')
+    : '';
+
+  const sysBlock = systemInfo ? `\n\nSistema do usuário:\n- OS: ${systemInfo.os} | Arch: ${systemInfo.arch}\n- CPU: ${systemInfo.cpuModel} (${systemInfo.cpus} núcleos)\n- RAM: ${systemInfo.freeMemGB}GB livre / ${systemInfo.totalMemGB}GB total\n- Usuário: ${systemInfo.username} | Home: ${systemInfo.homeDir}\n- Uptime: ${systemInfo.uptime}` : '';
+
+  const systemPrompt = {
+    role: 'system',
+    content: `Você é a MIAR ÁRIA, assistente de IA pessoal e nativa no Windows de Robson Calaça. Responda em português do Brasil. Seja direta e técnica.${memoryBlock}${customInstructions ? '\n\nINSTRUÇÕES FIXAS:\n' + customInstructions : ''}`,
+  };
+
+  let contextMessages = [systemPrompt, ...limitContext(messages)];
+
+  if (attachments && attachments.length > 0) {
+    const attachText = attachments
+      .map(a => `[Arquivo: ${a.name}]\n${a.content || '(sem texto extraído)'}`)
+      .join('\n\n---\n\n');
+    const lastIdx = contextMessages.length - 1;
+    if (contextMessages[lastIdx]?.role === 'user') {
+      contextMessages[lastIdx] = {
+        ...contextMessages[lastIdx],
+        content: contextMessages[lastIdx].content + '\n\n' + attachText,
+      };
+    }
+  }
+
+  // Tenta streaming via Groq primeiro (suporta SSE)
+  const groqKeys = getKeys('groq');
+  if (groqKeys.length) {
+    try {
+      const key = groqKeys[keyIndexes.groq % groqKeys.length];
+      const resp = await fetch(GROQ_API_URL, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: GROQ_PRIMARY_MODEL, messages: contextMessages, max_tokens: 4096, temperature: 0.7, stream: true }),
+        signal: makeSignal(),
+      });
+
+      if (resp.ok) {
+        const reader = resp.body.getReader();
+        const decoder = new TextDecoder();
+        let fullText = '';
+        let buffer = '';
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop();
+
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (trimmed.startsWith('data: ') && trimmed !== 'data: [DONE]') {
+              try {
+                const json = JSON.parse(trimmed.slice(6));
+                const delta = json.choices?.[0]?.delta?.content || '';
+                if (delta) {
+                  fullText += delta;
+                  onChunk(delta);
+                }
+              } catch {}
+            }
+          }
+        }
+
+        if (fullText) {
+          recordUsage('groq');
+          storageHandler.appendLog(`[AI STREAM OK] Provider: Groq | Model: ${GROQ_PRIMARY_MODEL}`);
+          return { ok: true, text: fullText, provider: 'Groq', model: GROQ_PRIMARY_MODEL, streaming: true };
+        }
+      }
+    } catch {}
+  }
+
+  // Fallback: Gemini com streaming
+  const geminiKeys = getKeys('gemini');
+  if (geminiKeys.length) {
+    try {
+      const key = geminiKeys[keyIndexes.gemini % geminiKeys.length];
+      const contents = contextMessages
+        .filter(m => m.role !== 'system')
+        .map(m => ({ role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: m.content }] }));
+      const systemMsg = contextMessages.find(m => m.role === 'system');
+      const body = { contents };
+      if (systemMsg) body.systemInstruction = { parts: [{ text: systemMsg.content }] };
+
+      const resp = await fetch(`${GEMINI_BASE_URL}:streamGenerateContent?alt=sse&key=${key}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+        signal: makeSignal(),
+      });
+
+      if (resp.ok) {
+        const reader = resp.body.getReader();
+        const decoder = new TextDecoder();
+        let fullText = '';
+        let buffer = '';
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop();
+
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (trimmed.startsWith('data: ')) {
+              try {
+                const json = JSON.parse(trimmed.slice(6));
+                const text = json.candidates?.[0]?.content?.parts?.[0]?.text || '';
+                if (text) {
+                  fullText += text;
+                  onChunk(text);
+                }
+              } catch {}
+            }
+          }
+        }
+
+        if (fullText) {
+          recordUsage('gemini');
+          storageHandler.appendLog(`[AI STREAM OK] Provider: Gemini | Model: gemini-2.0-flash`);
+          return { ok: true, text: fullText, provider: 'Gemini', model: 'gemini-2.0-flash', streaming: true };
+        }
+      }
+    } catch {}
+  }
+
+  // Fallback final: sendMessage normal (não-streaming)
+  return await sendMessage(messages, conversationId, attachments, memories, systemInfo, customInstructions);
+}
+
 // ── SEND MESSAGE ─────────────────────────────────────────────────────────────
 
 async function sendMessage(messages, conversationId, attachments, memories, systemInfo, customInstructions) {
@@ -565,4 +704,4 @@ async function transcribeWithWhisper(audioBuffer, mimeType = 'audio/webm') {
   return data.text || '';
 }
 
-module.exports = { sendMessage, testKey, getKeyStatus, transcribeWithWhisper, abortCurrentRequest, getUsageStats };
+module.exports = { sendMessage, sendMessageStream, testKey, getKeyStatus, transcribeWithWhisper, abortCurrentRequest, getUsageStats };
