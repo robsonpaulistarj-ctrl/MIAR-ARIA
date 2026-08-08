@@ -145,7 +145,7 @@ app.whenReady().then(() => {
       setTimeout(() => autoUpdater.checkForUpdatesAndNotify(), 5000);
       setInterval(() => autoUpdater.checkForUpdatesAndNotify(), 2 * 60 * 60 * 1000);
 
-      ipcMain.handle('updater:install-now', () => autoUpdater.quitAndInstall());
+      ipcMain.handle('updater:install-now', () => autoUpdater.quitAndInstall(false, true));
       ipcMain.handle('updater:check-now', () => autoUpdater.checkForUpdatesAndNotify());
     } catch (e) {
       // electron-updater não disponível em dev
