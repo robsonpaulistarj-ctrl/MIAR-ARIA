@@ -377,12 +377,12 @@ async function openConversation(id) {
 
 function clearChat() {
   state.messages = [];
-  document.getElementById('conv-title').textContent = 'MIAR ÁRIA';
+  document.getElementById('conv-title').textContent = 'MIAR AI';
   document.getElementById('messages').innerHTML = `
     <div id="empty-state">
-      <h2>MIAR ÁRIA</h2>
-      <p>Assistente de IA com voz, microfone e memória local.</p>
-      <div class="empty-hint">Configure sua chave de IA em ⚙ Configurações para começar.</div>
+      <h2>MIAR AI</h2>
+      <p>Assistente pessoal com voz, contexto, memória e automação para ajudar com tarefas do dia a dia.</p>
+      <div class="empty-hint">Configure sua chave de IA em ⚙ Configurações e comece escrevendo ou falando.</div>
     </div>`;
 }
 

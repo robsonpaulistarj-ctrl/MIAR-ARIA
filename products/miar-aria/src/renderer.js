@@ -381,8 +381,8 @@ function clearChat() {
   document.getElementById('messages').innerHTML = `
     <div id="empty-state">
       <h2>MIAR ÁRIA</h2>
-      <p>Assistente de IA com voz, microfone e memória local.</p>
-      <div class="empty-hint">Configure sua chave de IA em ⚙ Configurações para começar.</div>
+      <p>Assistente de computador com voz, contexto, memória e automação para cuidar de tarefas do dia a dia.</p>
+      <div class="empty-hint">Configure sua chave de IA em ⚙ Configurações e comece escrevendo ou falando.</div>
     </div>`;
 }
 

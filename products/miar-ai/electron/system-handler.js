@@ -84,12 +84,18 @@ function runCmd(command) {
   return executeShell(command, shellConfig);
 }
 
-async function runCommand(command) {
+async async function runCommand(command) {
   if (!command || !command.trim()) {
     return { ok: false, stdout: '', stderr: 'Comando vazio.', exitCode: -1 };
   }
   const cmd = command.trim();
-  return runPowerShell(cmd);
+  const shellConfig = getShellConfig(cmd);
+
+  if (process.platform === 'win32') {
+    return executeShell(cmd, shellConfig);
+  }
+
+  return executeShell(cmd, shellConfig);
 }
 
 function getSystemInfo() {

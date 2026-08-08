@@ -1,0 +1,77 @@
+{
+  "name": "miar-ai",
+  "version": "1.0.0",
+  "description": "MIAR AI - assistente de IA pessoal com voz, memória e automação local",
+  "author": "Robson Calaça",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/miarmaakyu/MIAR-ARIA.git"
+  },
+  "main": "electron/main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win --x64 --publish never",
+    "dist:dir": "electron-builder --win --x64 --dir --publish never",
+    "pack": "electron-builder --win --x64 --dir --publish never"
+  },
+  "dependencies": {
+    "electron-store": "^7.0.3",
+    "electron-updater": "^6.3.9",
+    "mammoth": "^1.7.1",
+    "pdf-parse": "^1.1.1"
+  },
+  "devDependencies": {
+    "electron": "^29.0.0",
+    "electron-builder": "^24.9.1"
+  },
+  "build": {
+    "appId": "com.miararia.miarai",
+    "productName": "MIAR AI",
+    "copyright": "Copyright © 2026 Robson Calaça",
+    "artifactName": "MIAR-AI-Setup-${version}.${ext}", 
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "electron/**/*",
+      "src/**/*",
+      "node_modules/**/*",
+      "package.json"
+    ],
+    "extraResources": [],
+    "publish": {
+      "provider": "github",
+      "owner": "miarmaakyu",
+      "repo": "MIAR-ARIA",
+      "releaseType": "release"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ],
+      "requestedExecutionLevel": "asInvoker"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "MIAR AI",
+      "perMachine": false,
+      "allowElevation": true,
+      "installerLanguages": ["pt_BR", "en_US"],
+      "language": "1046",
+      "deleteAppDataOnUninstall": false
+    },
+    "linux": {
+      "target": "AppImage"
+    },
+    "mac": {
+      "target": "dmg"
+    }
+  }
+}
