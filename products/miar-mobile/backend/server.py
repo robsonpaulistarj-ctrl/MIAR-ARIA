@@ -465,8 +465,38 @@ async def toggle_app(app_id: str, body: Dict):
 
 if __name__ == "__main__":
     import uvicorn
+    import argparse
+    
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--https", action="store_true", help="Usar HTTPS com certificados auto-assinados")
+    args = parser.parse_args()
+    
     print("🚀 MIAR ARIA Mobile Backend")
     print(f"   Port: 8100")
-    print(f"   Frontend: http://localhost:8100")
-    print(f"   API: http://localhost:8100/api")
-    uvicorn.run(app, host="0.0.0.0", port=8100)
+    
+    if args.https:
+        cert_file = os.path.join(os.path.dirname(__file__), "server.crt")
+        key_file = os.path.join(os.path.dirname(__file__), "server.key")
+        
+        if not os.path.exists(cert_file) or not os.path.exists(key_file):
+            print("⚠️  Certificados não encontrados. Gerando...")
+            import https_setup
+            https_setup.generate_certs()
+        
+        if os.path.exists(cert_file) and os.path.exists(key_file):
+            print(f"   🔒 HTTPS: https://localhost:8100")
+            print(f"   API: https://localhost:8100/api")
+            print(f"   ⚠️  No celular, aceite o certificado de segurança.")
+            print(f"   Use: https://SEU-IP:8100")
+            uvicorn.run(app, host="0.0.0.0", port=8100, 
+                       ssl_certfile=cert_file, ssl_keyfile=key_file)
+        else:
+            print("❌ Não foi possível gerar certificados. Usando HTTP.")
+            print(f"   Frontend: http://localhost:8100")
+            print(f"   API: http://localhost:8100/api")
+            uvicorn.run(app, host="0.0.0.0", port=8100)
+    else:
+        print(f"   Frontend: http://localhost:8100")
+        print(f"   API: http://localhost:8100/api")
+        print(f"   💡 Para microfone no celular, use: python3 server.py --https")
+        uvicorn.run(app, host="0.0.0.0", port=8100)
