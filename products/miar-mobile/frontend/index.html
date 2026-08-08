@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#050e09">
+  <title>MIAR ARIA</title>
+  <link rel="manifest" href="/static/manifest.json">
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+  <!-- ── Tela de boas-vindas / criar primeira história ── -->
+  <div id="welcome-screen" class="welcome-screen">
+    <div class="welcome-content">
+      <h1 class="logo">MIAR <span class="accent">ARIA</span></h1>
+      <p class="subtitle">Sua IA pessoal</p>
+      <div class="create-story-form">
+        <input type="text" id="story-name" placeholder="Nome da sua história..." class="story-input">
+        <textarea id="story-desc" placeholder="Conte sobre esta história pra IA saber..." class="story-desc"></textarea>
+        <div class="color-picker">
+          <span class="color-dot active" data-color="#27AE60" style="background:#27AE60"></span>
+          <span class="color-dot" data-color="#2ECC71" style="background:#2ECC71"></span>
+          <span class="color-dot" data-color="#1ABC9C" style="background:#1ABC9C"></span>
+          <span class="color-dot" data-color="#3498DB" style="background:#3498DB"></span>
+          <span class="color-dot" data-color="#9B59B6" style="background:#9B59B6"></span>
+          <span class="color-dot" data-color="#E74C3C" style="background:#E74C3C"></span>
+          <span class="color-dot" data-color="#F39C12" style="background:#F39C12"></span>
+          <span class="color-dot" data-color="#1ABC9C" style="background:#95A5A6"></span>
+        </div>
+        <button id="btn-create-story" class="btn-primary">Criar e Começar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── App Principal ── -->
+  <div id="app" class="app" style="display:none">
+    
+    <!-- ── Header ── -->
+    <header class="header">
+      <button id="btn-sidebar" class="btn-icon">☰</button>
+      <div class="header-title">
+        <span class="story-dot" id="header-dot"></span>
+        <span id="header-title" class="story-title">História</span>
+      </div>
+      <button id="btn-new-story" class="btn-icon">＋</button>
+    </header>
+
+    <!-- ── Sidebar (Histórias) ── -->
+    <div id="sidebar-overlay" class="sidebar-overlay"></div>
+    <aside id="sidebar" class="sidebar">
+      <div class="sidebar-header">
+        <h3>Histórias</h3>
+        <button id="btn-close-sidebar" class="btn-icon-small">✕</button>
+      </div>
+      <div id="stories-list" class="stories-list">
+        <!-- Preenchido via JS -->
+      </div>
+    </aside>
+
+    <!-- ── Área de Mensagens ── -->
+    <main id="chat-area" class="chat-area">
+      <div id="messages-container" class="messages-container">
+        <!-- Mensagens aparecem aqui -->
+      </div>
+      <div id="streaming-indicator" class="streaming-indicator" style="display:none">
+        <span class="typing-dot"></span><span class="typing-dot"></span><span class="typing-dot"></span>
+      </div>
+    </main>
+
+    <!-- ── Input Area ── -->
+    <footer class="input-area">
+      <!-- Botões arrastáveis -->
+      <div class="action-buttons" id="action-buttons">
+        <button id="btn-mic" class="btn-action" draggable="true" title="Microfone">🎤</button>
+        <button id="btn-camera" class="btn-action" draggable="true" title="Câmera">📷</button>
+        <button id="btn-attach" class="btn-action" draggable="true" title="Anexar">📎</button>
+        <button id="btn-memory" class="btn-action" draggable="true" title="Ler memórias">🧠</button>
+        <button id="btn-tts" class="btn-action hidden" draggable="true" title="Ouvir">🔊</button>
+      </div>
+      
+      <div class="input-row">
+        <div class="input-wrapper">
+          <textarea id="msg-input" class="msg-input" placeholder="Digite sua mensagem..." rows="1"></textarea>
+          <span id="char-count" class="char-count"></span>
+        </div>
+        <button id="btn-send" class="btn-send">▶</button>
+      </div>
+      <div id="timestamp" class="timestamp"></div>
+    </footer>
+
+    <!-- ── Modal Câmera ── -->
+    <div id="camera-modal" class="modal" style="display:none">
+      <div class="modal-content">
+        <video id="camera-preview" autoplay playsinline></video>
+        <canvas id="camera-canvas" style="display:none"></canvas>
+        <div class="camera-actions">
+          <button id="btn-capture" class="btn-capture">📸 Capturar</button>
+          <button id="btn-close-camera" class="btn-secondary">Fechar</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Configurações / Apps ── -->
+    <div id="settings-panel" class="settings-panel" style="display:none">
+      <div class="settings-header">
+        <h3>⚙️ Configurações</h3>
+        <button id="btn-close-settings" class="btn-icon-small">✕</button>
+      </div>
+      <div class="settings-content">
+        <section class="settings-section">
+          <h4>📱 Meus Apps</h4>
+          <div class="apps-list">
+            <div class="app-item" data-app="miar-desktop">
+              <span class="app-icon">💻</span>
+              <div class="app-info">
+                <span class="app-name">MIAR ARIA (Desktop)</span>
+                <span class="app-status">Principal — Mãe</span>
+              </div>
+            </div>
+            <div class="app-item" data-app="aredita">
+              <span class="app-icon">🎬</span>
+              <div class="app-info">
+                <span class="app-name">Aredita</span>
+                <span class="app-status">Editora de Roteiros</span>
+              </div>
+            </div>
+            <div class="app-item" data-app="manutencao">
+              <span class="app-icon">🔧</span>
+              <div class="app-info">
+                <span class="app-name">IA Manutenção</span>
+                <span class="app-status">Cuida do computador</span>
+              </div>
+            </div>
+            <div class="app-item" data-app="conversacao">
+              <span class="app-icon">💬</span>
+              <div class="app-info">
+                <span class="app-name">IA Conversação</span>
+                <span class="app-status">Chat companionship</span>
+              </div>
+            </div>
+          </div>
+        </section>
+        <section class="settings-section">
+          <h4>🔑 APIs</h4>
+          <div id="api-keys-config" class="api-keys-config">
+            <!-- Preenchido via JS -->
+          </div>
+        </section>
+        <section class="settings-section">
+          <h4>🧠 Memória</h4>
+          <div class="memory-actions">
+            <button id="btn-clear-memories" class="btn-danger">Apagar todas as memórias</button>
+            <span id="memory-count" class="memory-count"></span>
+          </div>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <script src="/static/js/app.js"></script>
+</body>
+</html>
