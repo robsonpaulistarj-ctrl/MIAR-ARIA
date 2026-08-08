@@ -462,70 +462,140 @@ function closeCamera() {
 }
 
 // ── Microfone (Speech Recognition) ────────────────────────────────────────────
+let recognitionInstance = null;
+let micFinalTranscript = '';
+let micRestartCount = 0;
+const MAX_RESTARTS = 5;
+
 function toggleMicrophone() {
   if (state.micActive) {
     stopMicrophone();
     return;
   }
   
+  // Verificar suporte
   if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
-    alert('Seu navegador não suporta reconhecimento de voz.');
+    // Fallback: usar API de áudio do navegador (Web Speech API pode não estar disponível)
+    // Em mobile (Android Chrome), a Web Speech API funciona bem
+    alert('Reconhecimento de voz não disponível neste navegador.\nTente: Chrome no Android ou Safari no iOS.');
     return;
   }
   
+  startRecognition();
+}
+
+function startRecognition() {
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-  const recognition = new SpeechRecognition();
-  recognition.lang = 'pt-BR';
-  recognition.continuous = true;
-  recognition.interimResults = true;
+  recognitionInstance = new SpeechRecognition();
   
-  let finalTranscript = '';
+  recognitionInstance.lang = 'pt-BR';
+  recognitionInstance.continuous = true;
+  recognitionInstance.interimResults = true;
+  recognitionInstance.maxAlternatives = 1;
+  
   let silenceTimer = null;
   
-  recognition.onresult = (event) => {
+  recognitionInstance.onresult = (event) => {
     let interim = '';
     for (let i = event.resultIndex; i < event.results.length; i++) {
       const transcript = event.results[i][0].transcript;
       if (event.results[i].isFinal) {
-        finalTranscript += transcript;
+        micFinalTranscript += transcript;
         resetSilenceTimer();
       } else {
         interim += transcript;
       }
     }
-    el.msgInput.value = finalTranscript + interim;
+    el.msgInput.value = micFinalTranscript + interim;
     el.msgInput.dispatchEvent(new Event('input'));
+    el.msgInput.focus();
   };
   
   function resetSilenceTimer() {
     clearTimeout(silenceTimer);
     silenceTimer = setTimeout(() => {
       stopMicrophone();
-      sendMessage();
+      if (el.msgInput.value.trim()) {
+        sendMessage();
+      }
     }, state.micTimeoutDuration);
   }
   
-  recognition.onend = () => {
-    state.micActive = false;
-    el.btnMic.style.background = '';
-    clearTimeout(silenceTimer);
+  recognitionInstance.onend = () => {
+    // Auto-restart se ainda estiver ativo (evita que pare sozinho)
+    if (state.micActive && micRestartCount < MAX_RESTARTS) {
+      micRestartCount++;
+      console.log(`Microfone: auto-restart (${micRestartCount})`);
+      setTimeout(() => {
+        if (state.micActive) startRecognition();
+      }, 100);
+    } else {
+      state.micActive = false;
+      micRestartCount = 0;
+      el.btnMic.style.background = '';
+      el.btnMic.style.animation = '';
+      clearTimeout(silenceTimer);
+    }
   };
   
-  recognition.onerror = (e) => {
+  recognitionInstance.onerror = (e) => {
     console.error('Speech error:', e.error);
-    stopMicrophone();
+    
+    if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
+      alert('Permissão de microfone negada.\nVá nas configurações do navegador e permita o microfone para este site.');
+      stopMicrophone();
+    } else if (e.error === 'no-speech') {
+      // Sem problema - só não ouviu nada
+      console.log('Nenhuma fala detectada, continuando...');
+    } else if (e.error === 'network') {
+      console.error('Erro de rede na Speech API. Verifique a conexão.');
+    } else if (e.error === 'aborted') {
+      // Normal quando paramos manualmente
+    } else {
+      console.error(`Speech error: ${e.error}`);
+    }
   };
   
-  recognition.start();
-  state.micActive = true;
-  el.btnMic.style.background = 'var(--accent)';
-  resetSilenceTimer();
+  recognitionInstance.onstart = () => {
+    state.micActive = true;
+    el.btnMic.style.background = '#e74c3c';
+    el.btnMic.style.animation = 'pulse 1.5s infinite';
+    console.log('Microfone iniciado');
+  };
+  
+  try {
+    recognitionInstance.start();
+  } catch (e) {
+    // Se já está rodando, não fazer nada
+    if (e.message.includes('already started')) {
+      // OK
+    } else {
+      console.error('Erro ao iniciar reconhecimento:', e);
+      stopMicrophone();
+    }
+  }
 }
 
 function stopMicrophone() {
   state.micActive = false;
+  micRestartCount = 0;
   el.btnMic.style.background = '';
+  el.btnMic.style.animation = '';
+  if (recognitionInstance) {
+    try { recognitionInstance.stop(); } catch(e) {}
+    recognitionInstance = null;
+  }
 }
+
+// Adicionar animação pulse no CSS
+const style = document.createElement('style');
+style.textContent = `
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+  }
+`;
+document.head.appendChild(style);
 
 // ── TTS ───────────────────────────────────────────────────────────────────────
 function toggleTTS() {
