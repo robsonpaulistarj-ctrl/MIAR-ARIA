@@ -1,4 +1,5 @@
 const { app, BrowserWindow, ipcMain, dialog, Menu, session } = require('electron');
+const { spawn } = require('child_process');
 const path = require('path');
 
 const aiHandler          = require('./ai-handler');
@@ -7,6 +8,7 @@ const fileHandler        = require('./file-handler');
 const maintenanceHandler = require('./maintenance-handler');
 const memoryHandler      = require('./memory-handler');
 const systemHandler      = require('./system-handler');
+const cameraHandler      = require('./camera-handler');
 
 // ── Flags Chromium — necessário para Web Speech API + microfone ───────────────
 app.commandLine.appendSwitch('enable-speech-dispatcher');
@@ -16,13 +18,16 @@ let mainWindow = null;
 
 function createWindow() {
   mainWindow = new BrowserWindow({
-    width: 1200,
-    height: 800,
-    minWidth: 800,
-    minHeight: 600,
-    title: 'MIAR ÁRIA',
+    width: 1280,
+    height: 860,
+    minWidth: 900,
+    minHeight: 680,
+    title: 'MIAR ÁRIA - Windows',
     backgroundColor: '#06101c',
     show: false,
+    icon: path.join(__dirname, '..', 'build', 'icon.png'),
+    titleBarStyle: 'default',
+    center: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: false,
@@ -43,14 +48,77 @@ function createWindow() {
   });
 
   mainWindow.loadFile(path.join(__dirname, '..', 'src', 'index.html'));
-  mainWindow.once('ready-to-show', () => mainWindow.show());
+  mainWindow.once('ready-to-show', () => {
+    mainWindow.show();
+    mainWindow.focus();
+  });
   mainWindow.on('closed', () => { mainWindow = null; });
   Menu.setApplicationMenu(null);
+}
+
+let agentBackendProcess = null;
+
+function startAgentBackend() {
+  if (agentBackendProcess) return;
+  const backendPath = path.join(__dirname, '..', '..', '..', 'ai-agent-monitor', 'backend', 'agent_server.py');
+  const cwd = path.dirname(backendPath);
+  const pythonCmd = process.platform === 'win32' ? 'python' : 'python3';
+  const python = process.env.PYTHON_PATH || process.env.PYTHON || pythonCmd;
+
+  try {
+    agentBackendProcess = spawn(python, [backendPath], {
+      cwd,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env: { ...process.env, PYTHONUNBUFFERED: '1' },
+    });
+
+    agentBackendProcess.stdout.on('data', (chunk) => {
+      console.log(`[agent-backend] ${chunk.toString().trim()}`);
+    });
+    agentBackendProcess.stderr.on('data', (chunk) => {
+      console.error(`[agent-backend] ${chunk.toString().trim()}`);
+    });
+    agentBackendProcess.on('exit', (code, signal) => {
+      console.log(`[agent-backend] exited code=${code} signal=${signal}`);
+      agentBackendProcess = null;
+    });
+  } catch (error) {
+    console.error('Erro ao iniciar backend do agent monitor:', error);
+    agentBackendProcess = null;
+  }
+}
+
+function stopAgentBackend() {
+  if (!agentBackendProcess) return;
+  try {
+    agentBackendProcess.kill();
+  } catch (error) {
+    console.error('Erro ao parar backend do agent monitor:', error);
+  }
+  agentBackendProcess = null;
+}
+
+function createAgentMonitorWindow() {
+  const monitorWindow = new BrowserWindow({
+    width: 1400,
+    height: 920,
+    title: 'MIAR ÁRIA — Agent Monitor',
+    icon: path.join(__dirname, '..', 'build', 'icon.png'),
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  });
+  monitorWindow.loadFile(path.join(__dirname, '..', '..', '..', 'ai-agent-monitor', 'frontend', 'index.html'));
+  monitorWindow.on('closed', () => {});
+  return monitorWindow;
 }
 
 app.whenReady().then(() => {
   storageHandler.init();
   memoryHandler.init();
+  startAgentBackend();
   createWindow();
 
   // ── Auto-updater ─────────────────────────────────────────────────────────
@@ -89,6 +157,10 @@ app.whenReady().then(() => {
   });
 });
 
+app.on('before-quit', () => {
+  stopAgentBackend();
+});
+
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
 });
@@ -122,11 +194,37 @@ ipcMain.handle('whisper:transcribe', async (_e, buffer, mimeType) => {
   return await aiHandler.transcribeWithWhisper(Buffer.from(buffer), mimeType);
 });
 
+// ── CÂMERA ────────────────────────────────────────────────────────────────────
+ipcMain.handle('camera:capture', async () => {
+  return cameraHandler.getCameras();
+});
+
+// ── STREAMING IA ──────────────────────────────────────────────────────────────
+ipcMain.handle('ai:send-stream', async (event, { messages, conversationId, attachments, memories, customInstructions }) => {
+  const sysInfo = systemHandler.getSystemInfo();
+  try {
+    const result = await aiHandler.sendMessageStream(messages, conversationId, attachments, memories, sysInfo, customInstructions, (chunk) => {
+      mainWindow?.webContents.send('ai:stream', { type: 'chunk', text: chunk });
+    });
+    mainWindow?.webContents.send('ai:stream', { type: 'done', ...result });
+    return result;
+  } catch (err) {
+    mainWindow?.webContents.send('ai:stream', { type: 'error', error: err.message });
+    return { ok: false, error: err.message };
+  }
+});
+
 // ── AI ────────────────────────────────────────────────────────────────────────
 
 ipcMain.handle('ai:send-message', async (event, { messages, conversationId, attachments, memories, customInstructions }) => {
   const sysInfo = systemHandler.getSystemInfo();
   return await aiHandler.sendMessage(messages, conversationId, attachments, memories, sysInfo, customInstructions);
+});
+
+ipcMain.handle('agent:open-monitor', async () => {
+  startAgentBackend();
+  createAgentMonitorWindow();
+  return { ok: true };
 });
 
 // ── SYSTEM / WINDOWS ──────────────────────────────────────────────────────────
@@ -163,6 +261,7 @@ ipcMain.handle('storage:get-conversation', async (e, id) => storageHandler.getCo
 ipcMain.handle('storage:create-conversation', async (e, title) => storageHandler.createConversation(title));
 ipcMain.handle('storage:save-message', async (e, p) => storageHandler.saveMessage(p.conversationId, p.role, p.content, p.attachments));
 ipcMain.handle('storage:update-conversation-title', async (e, p) => storageHandler.updateConversationTitle(p.id, p.title));
+ipcMain.handle('storage:update-conversation-color', async (e, p) => storageHandler.updateConversationColor(p.id, p.color));
 ipcMain.handle('storage:delete-conversation', async (e, id) => storageHandler.deleteConversation(id));
 ipcMain.handle('storage:search-conversations', async (e, q) => storageHandler.searchConversations(q));
 ipcMain.handle('storage:get-last-conversation-id', async () => storageHandler.getLastConversationId());

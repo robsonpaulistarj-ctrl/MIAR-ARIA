@@ -70,7 +70,7 @@ function addMemory({ content, category = 'geral', source = 'user', confidence = 
   return mem;
 }
 
-function getMemories({ category, query, limit = 20 } = {}) {
+function getMemories({ category, query, limit = Infinity } = {}) {
   init();
   let result = [...memories];
   if (category && category !== 'todas') result = result.filter(m => m.category === category);
@@ -82,7 +82,7 @@ function getMemories({ category, query, limit = 20 } = {}) {
   return result.slice(0, limit);
 }
 
-function searchRelevantMemories(userMessage, limit = 10) {
+function searchRelevantMemories(userMessage, limit = 100) {
   init();
   if (memories.length === 0) return [];
 
