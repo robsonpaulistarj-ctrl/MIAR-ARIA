@@ -6,6 +6,7 @@ services:
     branch: staging/mvp-deploy-final
     plan: free
     buildCommand: pnpm install --frozen-lockfile && pnpm --filter ./artifacts/api-server build
+    preDeployCommand: pnpm db:migrate
     startCommand: pnpm check:staging && node artifacts/api-server/dist/index.mjs
     healthCheckPath: /api/healthz
     envVars:
@@ -16,11 +17,13 @@ services:
       - key: NODE_ENV
         value: production
       - key: ALLOW_EPHEMERAL_DB
-        value: 'true'
+        value: 'false'
       - key: ALLOW_EPHEMERAL_STORAGE
         value: 'true'
       - key: DATABASE_URL
-        sync: false
+        fromDatabase:
+          name: miar-db
+          property: connectionString
       - key: MIAR_ACCESS_TOKEN
         generateValue: true
       - key: OPENAI_API_KEY
@@ -58,3 +61,9 @@ services:
         value: https://miar-api-texv.onrender.com/api
       - key: VITE_AUTH_REQUIRED
         value: 'true'
+
+databases:
+  - name: miar-db
+    databaseName: miar
+    user: miar
+    plan: free

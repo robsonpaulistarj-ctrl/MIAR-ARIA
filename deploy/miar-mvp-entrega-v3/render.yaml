@@ -4,6 +4,7 @@ services:
     runtime: node
     plan: free
     buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm --filter ./artifacts/api-server build
+    preDeployCommand: pnpm db:migrate
     startCommand: pnpm check:staging && node artifacts/api-server/dist/index.mjs
     healthCheckPath: /api/healthz
     envVars:
@@ -12,7 +13,7 @@ services:
       - key: PORT
         value: '10000'
       - key: ALLOW_EPHEMERAL_DB
-        value: 'true'
+        value: 'false'
       - key: ALLOW_EPHEMERAL_STORAGE
         value: 'true'
       - key: MIAR_ACCESS_TOKEN
@@ -39,6 +40,10 @@ services:
         value: production
       - key: WEB_ORIGIN
         value: https://miar-web.onrender.com
+      - key: DATABASE_URL
+        fromDatabase:
+          name: miar-db
+          property: connectionString
       - key: LOG_LEVEL
         value: info
 
@@ -49,6 +54,12 @@ services:
     staticPublishPath: ./artifacts/miar-pessoal/dist/public
     envVars:
       - key: VITE_API_URL
-        value: https://miar-api.onrender.com/api
+        value: https://miar-api-texv.onrender.com/api
       - key: VITE_AUTH_REQUIRED
         value: 'true'
+
+databases:
+  - name: miar-db
+    databaseName: miar
+    user: miar
+    plan: free
