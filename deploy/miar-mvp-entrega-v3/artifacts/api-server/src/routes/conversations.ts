@@ -22,6 +22,7 @@ import { readAttachmentBuffer } from '../lib/attachment-storage';
 import { rateLimit } from '../lib/rate-limit';
 import { ApiError, getCurrentUser } from '../lib/current-user';
 import { createConversationSchema, parseBody, sendMessageSchema } from '../lib/validation';
+import { publishConversationUpdate, registerConversationListener } from '../lib/realtime';
 
 const router: IRouter = Router();
 
@@ -117,6 +118,28 @@ router.post('/conversations', async (request, response) => {
   response.status(201).json({ ...created[0], messages: greeting });
 });
 
+router.get('/conversations/:conversationId/events', async (request, response) => {
+  const user = await getCurrentUser(request);
+  const conversationId = Array.isArray(request.params.conversationId)
+    ? request.params.conversationId[0]
+    : request.params.conversationId;
+
+  if (memoryStorageEnabled) {
+    if (!memoryGetConversation(user.id, conversationId)) throw new ApiError(404, 'Conversation not found.');
+  } else {
+    const database = requireDb();
+    const conversation = await database
+      .select({ id: conversationsTable.id })
+      .from(conversationsTable)
+      .where(and(eq(conversationsTable.id, conversationId), eq(conversationsTable.userId, user.id)))
+      .limit(1);
+    if (!conversation[0]) throw new ApiError(404, 'Conversation not found.');
+  }
+
+  const cleanup = registerConversationListener(user.id, conversationId, response);
+  request.on('close', cleanup);
+});
+
 router.get('/conversations/:conversationId', async (request, response) => {
   const user = await getCurrentUser(request);
   if (memoryStorageEnabled) {
@@ -181,6 +204,10 @@ router.post('/conversations/:conversationId/messages', rateLimit({ name: 'ai', w
       title: nextTitle || 'Nova conversa',
       updatedAt: new Date(),
     });
+    publishConversationUpdate(user.id, {
+      conversationId: conversation.id,
+      updatedAt: (updatedConversation?.updatedAt ?? assistantMessage.createdAt).toISOString(),
+    });
     response.status(201).json({
       conversation: updatedConversation ?? conversation,
       userMessage,
@@ -243,6 +270,10 @@ router.post('/conversations/:conversationId/messages', rateLimit({ name: 'ai', w
     .set({ title: nextTitle || 'Nova conversa', updatedAt: new Date() })
     .where(eq(conversationsTable.id, current.conversation.id))
     .returning();
+  publishConversationUpdate(user.id, {
+    conversationId: current.conversation.id,
+    updatedAt: (updatedConversation[0]?.updatedAt ?? assistantMessage[0].createdAt).toISOString(),
+  });
   response.status(201).json({
     conversation: updatedConversation[0] ?? current.conversation,
     userMessage: userMessage[0],

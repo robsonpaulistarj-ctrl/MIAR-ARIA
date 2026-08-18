@@ -41,6 +41,7 @@ import {
   listRemoteConversations,
   listRemoteStories,
   sendRemoteMessage,
+  subscribeRemoteConversation,
   uploadRemoteAttachment,
   type RemoteAttachment,
   type RemoteConversation,
@@ -371,6 +372,29 @@ function Home() {
       cancelled = true;
     };
   }, [backendStatus, selectedStoryId]);
+
+  useEffect(() => {
+    if (backendStatus !== 'connected' || !selectedConversationId) return;
+    let active = true;
+    const unsubscribe = subscribeRemoteConversation(selectedConversationId, (conversationId) => {
+      if (!active || conversationId !== selectedConversationId) return;
+      void getRemoteConversation(conversationId)
+        .then((full) => {
+          if (!active) return;
+          const nextConversation = mapRemoteConversation(full);
+          setConversations((current) => {
+            const exists = current.some((conversation) => conversation.id === nextConversation.id);
+            if (!exists) return [nextConversation, ...current];
+            return current.map((conversation) => conversation.id === nextConversation.id ? nextConversation : conversation);
+          });
+        })
+        .catch(() => undefined);
+    });
+    return () => {
+      active = false;
+      unsubscribe();
+    };
+  }, [backendStatus, selectedConversationId]);
 
   useEffect(() => {
     if (textareaRef.current) {

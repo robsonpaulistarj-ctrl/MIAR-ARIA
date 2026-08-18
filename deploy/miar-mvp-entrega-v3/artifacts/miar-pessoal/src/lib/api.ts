@@ -105,6 +105,26 @@ export function getRemoteConversation(id: string) {
   return request<RemoteConversation>(`/conversations/${id}`);
 }
 
+export function subscribeRemoteConversation(
+  id: string,
+  onUpdate: (conversationId: string) => void,
+  onError?: () => void,
+) {
+  const source = new EventSource(`${apiBaseUrl}/conversations/${encodeURIComponent(id)}/events`, {
+    withCredentials: true,
+  });
+  source.addEventListener('conversation.updated', (event) => {
+    try {
+      const payload = JSON.parse((event as MessageEvent<string>).data) as { conversationId?: string };
+      if (payload.conversationId) onUpdate(payload.conversationId);
+    } catch {
+      onError?.();
+    }
+  });
+  source.addEventListener('error', () => onError?.());
+  return () => source.close();
+}
+
 export function uploadRemoteAttachment(file: File) {
   const body = new FormData();
   body.append('file', file);
