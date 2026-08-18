@@ -32,9 +32,18 @@ const configuredOrigins = process.env.WEB_ORIGIN
 if (process.env.NODE_ENV === 'production' && configuredOrigins.length === 0) {
   throw new Error('WEB_ORIGIN must be configured in production.');
 }
-const allowedOrigins = configuredOrigins.length ? configuredOrigins : true;
+const allowAnyOrigin = process.env.NODE_ENV !== 'production' && configuredOrigins.length === 0;
 
-app.use(cors({ origin: allowedOrigins, credentials: true }));
+app.use(cors({
+  origin: (origin, callback) => {
+    if (!origin || allowAnyOrigin || configuredOrigins.includes(origin)) {
+      callback(null, true);
+      return;
+    }
+    callback(null, false);
+  },
+  credentials: true,
+}));
 app.use(cookieParser());
 app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: true, limit: '2mb' }));
