@@ -5,7 +5,7 @@ services:
     rootDir: deploy/miar-mvp-entrega-v3
     branch: staging/mvp-deploy-final
     plan: free
-    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm --filter ./artifacts/api-server build
+    buildCommand: pnpm install --frozen-lockfile && pnpm --filter ./artifacts/api-server build
     startCommand: pnpm check:staging && node artifacts/api-server/dist/index.mjs
     healthCheckPath: /api/healthz
     envVars:
@@ -51,7 +51,7 @@ services:
     runtime: static
     rootDir: deploy/miar-mvp-entrega-v3
     branch: staging/mvp-deploy-final
-    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm --filter ./artifacts/miar-pessoal build
+    buildCommand: pnpm install --frozen-lockfile && pnpm --filter ./artifacts/miar-pessoal build
     staticPublishPath: ./artifacts/miar-pessoal/dist/public
     envVars:
       - key: VITE_API_URL
