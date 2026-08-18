@@ -55,6 +55,6 @@ services:
     staticPublishPath: ./artifacts/miar-pessoal/dist/public
     envVars:
       - key: VITE_API_URL
-        value: https://miar-api.onrender.com/api
+        value: https://miar-api-texv.onrender.com/api
       - key: VITE_AUTH_REQUIRED
         value: 'true'
