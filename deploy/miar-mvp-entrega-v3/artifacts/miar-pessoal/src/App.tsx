@@ -50,7 +50,8 @@ import {
 } from '@/lib/api';
 
 const queryClient = new QueryClient();
-const authRequired = import.meta.env.VITE_AUTH_REQUIRED === 'true';
+const publicAccess = import.meta.env.VITE_PUBLIC_ACCESS === 'true' || (import.meta.env.PROD && import.meta.env.VITE_PUBLIC_ACCESS !== 'false');
+const authRequired = !publicAccess && import.meta.env.VITE_AUTH_REQUIRED === 'true';
 
 type ProviderModel = {
   id: string;

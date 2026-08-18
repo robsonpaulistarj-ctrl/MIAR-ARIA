@@ -37,7 +37,9 @@ export async function getCurrentUser(request: Request): Promise<User> {
     throw new ApiError(503, 'DATABASE_URL is required for data operations.');
   }
 
-  if (process.env.MIAR_PUBLIC_ACCESS === 'true') {
+  const publicAccess = process.env.MIAR_PUBLIC_ACCESS === 'true'
+    || (process.env.NODE_ENV === 'production' && process.env.MIAR_PUBLIC_ACCESS !== 'false');
+  if (publicAccess) {
     const email = process.env.PUBLIC_USER_EMAIL?.trim().toLowerCase() || 'public@miar.local';
     return getOrCreateUser(email);
   }
