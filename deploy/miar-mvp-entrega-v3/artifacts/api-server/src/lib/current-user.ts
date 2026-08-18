@@ -14,9 +14,32 @@ export class ApiError extends Error {
   }
 }
 
+async function getOrCreateUser(email: string): Promise<User> {
+  if (memoryStorageEnabled) return memoryGetOrCreateUser(email);
+
+  const existing = await db!.select().from(usersTable).where(eq(usersTable.email, email)).limit(1);
+  if (existing[0]) return existing[0];
+
+  const created = await db!
+    .insert(usersTable)
+    .values({
+      email,
+      displayName: email.split('@')[0] || 'Utilizador',
+    })
+    .returning();
+
+  if (!created[0]) throw new ApiError(500, 'Could not create the public user.');
+  return created[0];
+}
+
 export async function getCurrentUser(request: Request): Promise<User> {
   if (!db && !memoryStorageEnabled) {
     throw new ApiError(503, 'DATABASE_URL is required for data operations.');
+  }
+
+  if (process.env.MIAR_PUBLIC_ACCESS === 'true') {
+    const email = process.env.PUBLIC_USER_EMAIL?.trim().toLowerCase() || 'public@miar.local';
+    return getOrCreateUser(email);
   }
 
   const sessionToken = request.cookies?.miar_session;
@@ -45,21 +68,5 @@ export async function getCurrentUser(request: Request): Promise<User> {
     process.env.DEV_USER_EMAIL?.trim().toLowerCase() ||
     'dev@miar.local';
 
-  if (memoryStorageEnabled) return memoryGetOrCreateUser(email);
-
-  const existing = await db!.select().from(usersTable).where(eq(usersTable.email, email)).limit(1);
-  if (existing[0]) return existing[0];
-
-  const created = await db!
-    .insert(usersTable)
-    .values({
-      email,
-      displayName: email.split('@')[0] || 'Utilizador local',
-    })
-    .returning();
-
-  if (!created[0]) {
-    throw new ApiError(500, 'Could not create the local user.');
-  }
-  return created[0];
+  return getOrCreateUser(email);
 }

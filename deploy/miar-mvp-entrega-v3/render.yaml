@@ -4,8 +4,7 @@ services:
     runtime: node
     plan: free
     buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm --filter ./artifacts/api-server build
-    preDeployCommand: pnpm db:migrate
-    startCommand: pnpm check:staging && node artifacts/api-server/dist/index.mjs
+    startCommand: pnpm db:migrate && pnpm check:staging && node artifacts/api-server/dist/index.mjs
     healthCheckPath: /api/healthz
     envVars:
       - key: NODE_VERSION
@@ -14,6 +13,10 @@ services:
         value: '10000'
       - key: ALLOW_EPHEMERAL_DB
         value: 'false'
+      - key: MIAR_PUBLIC_ACCESS
+        value: 'true'
+      - key: PUBLIC_USER_EMAIL
+        value: public@miar.local
       - key: ALLOW_EPHEMERAL_STORAGE
         value: 'true'
       - key: MIAR_ACCESS_TOKEN
@@ -56,7 +59,7 @@ services:
       - key: VITE_API_URL
         value: https://miar-api-texv.onrender.com/api
       - key: VITE_AUTH_REQUIRED
-        value: 'true'
+        value: 'false'
 
 databases:
   - name: miar-db
