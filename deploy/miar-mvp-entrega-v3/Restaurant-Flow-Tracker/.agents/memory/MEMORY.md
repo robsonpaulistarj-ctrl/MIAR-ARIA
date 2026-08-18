@@ -1,0 +1,5 @@
+- [MIAR multi-tenant rule](miar-multitenant.md) — restaurantId SEMPRE do JWT, nunca do body; bug histórico era null em pedidos via QR de mesa
+- [MIAR employee login](miar-employee-login.md) — POST /auth/employee-login aceita {"token":"XXXX"} com PIN direto (4-6 dígitos) ou token QR; não Bearer
+- [MIAR AI provider](miar-ai-provider.md) — usar Groq (GROQ_API_KEY), nunca xAI (pago sem tier gratuito)
+- [MIAR cashier session](miar-cashier-session.md) — POST /cashier/session/open exige {initialFloat, operatorName}; close exige {actualCash, operatorName}
+- [MIAR table flow](miar-table-flow.md) — fluxo completo: free→occupied→paid→cleaning→free; close só via exit QR token

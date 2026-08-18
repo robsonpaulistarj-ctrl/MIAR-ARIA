@@ -1,0 +1,1 @@
+- [Browser media capture testing](browser-media-capture-testing.md) — real permission-dialog testing is required; code and container checks cannot substitute for desktop/mobile browser validation.

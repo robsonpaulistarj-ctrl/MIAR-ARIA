@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "MIAR EDITA"
+description = "A browser-based video recording workspace for MIAR EDITA, with screen and camera capture, script guidance, picture-in-picture preview, and downloadable recordings for desktop and Android mobile browsers."
+version = "1.0.0"
+id = "artifacts/miar-edita"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 23254
+
+[services.development]
+run = "pnpm --filter @workspace/miar-edita run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/miar-edita", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/miar-edita/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "23254"
+BASE_PATH = "/"

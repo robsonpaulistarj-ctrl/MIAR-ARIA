@@ -1,0 +1,9 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "dsX0xSDxoD0eFDlwrnCjK"
+uri = "file://.agents/outputs/miar-edita-recording-container-test.webm"
+type = "video"
+title = "Teste de vídeo WebM da MIAR EDITA"
+description = "Arquivo WebM curto para validar o contêiner, com vídeo VP8 e áudio Opus e duração aproximada de 2 segundos."

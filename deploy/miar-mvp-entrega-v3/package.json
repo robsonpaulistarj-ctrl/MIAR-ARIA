@@ -1,0 +1,28 @@
+{
+  "name": "workspace",
+  "version": "0.0.0",
+  "license": "MIT",
+  "scripts": {
+    "preinstall": "sh -c 'rm -f package-lock.json yarn.lock; case \"$npm_config_user_agent\" in pnpm/*) ;; *) echo \"Use pnpm instead\" >&2; exit 1 ;; esac'",
+    "build": "pnpm run typecheck && pnpm -r --if-present run build",
+    "check": "pnpm run typecheck && pnpm run build && pnpm audit --prod",
+    "db:generate": "pnpm --filter @workspace/db generate",
+    "db:migrate": "pnpm --filter @workspace/db migrate",
+    "dev": "pnpm --parallel --filter ./artifacts/api-server --filter ./artifacts/miar-pessoal dev",
+    "dev:api": "pnpm --filter ./artifacts/api-server dev",
+    "dev:miar": "pnpm --filter ./artifacts/miar-pessoal dev",
+    "smoke:api": "node ./scripts/smoke-api.mjs",
+    "smoke:vision": "node ./scripts/smoke-vision.mjs",
+    "check:staging": "node ./scripts/check-staging-env.mjs",
+    "typecheck:libs": "tsc --build",
+    "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck"
+  },
+  "private": true,
+  "dependencies": {
+    "@replit/connectors-sdk": "^0.4.1"
+  },
+  "devDependencies": {
+    "prettier": "^3.9.6",
+    "typescript": "~5.9.3"
+  }
+}

@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/miar-pessoal/"
+title = "MIAR Pessoal"
+description = "A private single-user AI workspace for personal conversations, individual memory, ideas, routines, and context. It is intentionally separate from MIAR EDITA while using a compatible shared API foundation for a future ecosystem integration."
+version = "1.0.0"
+id = "artifacts/miar-pessoal"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/miar-pessoal/" ]
+localPort = 24016
+
+[services.development]
+run = "pnpm --filter @workspace/miar-pessoal run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/miar-pessoal", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/miar-pessoal/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "24016"
+BASE_PATH = "/miar-pessoal/"
