@@ -48,3 +48,13 @@ Fontes: https://render.com/docs/free (Deploy for Free — Preview the Render pla
 A implementação foi ampliada para usar `STORAGE_PROVIDER=database`: a nova tabela PostgreSQL `attachments` guarda utilizador, chave, nome, MIME type, tamanho, checksum e bytes do ficheiro em `bytea`. A rota existente de upload/download continua a ser usada, mas agora grava e lê do PostgreSQL. O provider S3 permanece disponível como alternativa futura; o armazenamento local fica reservado para desenvolvimento ou staging efémero.
 
 Foi gerada a migração `lib/db/drizzle/0002_marvelous_madame_web.sql`. O preflight agora aceita `database`, não exige credenciais S3 nesse modo e avisa que o espaço de anexos conta para o limite do PostgreSQL. Typecheck e builds da API e do frontend passaram. A migração e o teste real de upload no serviço publicado ainda dependem do próximo deploy e da execução de `pnpm db:migrate` no Render.
+
+## Auto-deploy — confirmação oficial do Render
+
+A documentação oficial confirma que serviços ligados a uma branch Git fazem auto-deploy por padrão a cada push. Em **Settings → Auto-Deploy**, a opção **On Commit** inicia o deploy assim que há push na branch ligada; **Off** desactiva o comportamento.
+
+A documentação também confirma o motivo do comportamento observado no MIAR: no Dashboard, escolher **Manual Deploy → Deploy a specific commit** desactiva o auto-deploy do serviço. Escolher **Deploy latest commit** é diferente. Portanto, o deploy manual de uma commit específica pode ter desligado o Auto-Deploy, mas isso não foi retirado pelo código de propósito.
+
+Para Blueprints, o Render também possui uma configuração separada chamada **Auto Sync**. Por padrão, um push que altera o Blueprint pode actualizar os recursos afectados; se Auto Sync estiver em No, é necessário clicar em Manual Sync. A configuração de serviço (Auto-Deploy) e a configuração do Blueprint (Auto Sync) são independentes.
+
+A sintaxe oficial no Blueprint para serviços Git é `autoDeployTrigger: commit`, que fixa o comportamento de deploy automático por commit. Fontes: https://render.com/docs/deploys; https://render.com/docs/blueprint-spec; https://render.com/docs/infrastructure-as-code.

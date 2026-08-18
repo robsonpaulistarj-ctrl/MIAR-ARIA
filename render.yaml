@@ -5,6 +5,7 @@ services:
     rootDir: deploy/miar-mvp-entrega-v3
     branch: staging/mvp-deploy-final
     plan: free
+    autoDeployTrigger: commit
     buildCommand: pnpm install --frozen-lockfile && pnpm --filter ./artifacts/api-server build
     startCommand: pnpm db:migrate && pnpm check:staging && node artifacts/api-server/dist/index.mjs
     healthCheckPath: /api/healthz
@@ -21,8 +22,6 @@ services:
         value: 'true'
       - key: PUBLIC_USER_EMAIL
         value: public@miar.local
-      - key: ALLOW_EPHEMERAL_STORAGE
-        value: 'true'
       - key: DATABASE_URL
         fromDatabase:
           name: miar-db

@@ -2,6 +2,7 @@ services:
   - type: web
     name: miar-api
     runtime: node
+    autoDeployTrigger: commit
     plan: free
     buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm --filter ./artifacts/api-server build
     startCommand: pnpm db:migrate && pnpm check:staging && node artifacts/api-server/dist/index.mjs
@@ -17,8 +18,6 @@ services:
         value: 'true'
       - key: PUBLIC_USER_EMAIL
         value: public@miar.local
-      - key: ALLOW_EPHEMERAL_STORAGE
-        value: 'true'
       - key: MIAR_ACCESS_TOKEN
         generateValue: true
       - key: OPENAI_API_KEY
@@ -51,6 +50,7 @@ services:
   - type: web
     name: miar-web
     runtime: static
+    autoDeployTrigger: commit
     buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm --filter ./artifacts/miar-pessoal build
     staticPublishPath: ./artifacts/miar-pessoal/dist/public
     envVars:
