@@ -15,6 +15,13 @@
       "when": 1786963319976,
       "tag": "0001_glossy_warstar",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1787095521288,
+      "tag": "0002_marvelous_madame_web",
+      "breakpoints": true
     }
   ]
 }

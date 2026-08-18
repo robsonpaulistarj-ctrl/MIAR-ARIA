@@ -1,7 +1,9 @@
 import { createInsertSchema } from 'drizzle-zod';
 import {
   boolean,
+  customType,
   index,
+  integer,
   jsonb,
   pgTable,
   text,
@@ -9,6 +11,12 @@ import {
   uuid,
 } from 'drizzle-orm/pg-core';
 import { z } from 'zod/v4';
+
+const attachmentData = customType<{ data: Buffer; driverData: Buffer; notNull: true }>({
+  dataType() {
+    return 'bytea';
+  },
+});
 
 export const usersTable = pgTable('users', {
   id: uuid('id').defaultRandom().primaryKey(),
@@ -68,6 +76,24 @@ export const conversationsTable = pgTable(
   ],
 );
 
+export const attachmentsTable = pgTable(
+  'attachments',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => usersTable.id, { onDelete: 'cascade' }),
+    key: text('key').notNull().unique(),
+    name: text('name').notNull(),
+    type: text('type').notNull(),
+    size: integer('size').notNull(),
+    checksum: text('checksum').notNull(),
+    data: attachmentData('data').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [index('attachments_user_id_idx').on(table.userId)],
+);
+
 export type MessageAttachment = {
   id?: string;
   name: string;
@@ -120,6 +146,7 @@ export type Session = typeof sessionsTable.$inferSelect;
 export type Story = typeof storiesTable.$inferSelect;
 export type Conversation = typeof conversationsTable.$inferSelect;
 export type Message = typeof messagesTable.$inferSelect;
+export type Attachment = typeof attachmentsTable.$inferSelect;
 export type Memory = typeof memoriesTable.$inferSelect;
 
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -127,4 +154,5 @@ export type InsertSession = z.infer<typeof insertSessionSchema>;
 export type InsertStory = z.infer<typeof insertStorySchema>;
 export type InsertConversation = z.infer<typeof insertConversationSchema>;
 export type InsertMessage = z.infer<typeof insertMessageSchema>;
+export type InsertAttachment = typeof attachmentsTable.$inferInsert;
 export type InsertMemory = z.infer<typeof insertMemorySchema>;

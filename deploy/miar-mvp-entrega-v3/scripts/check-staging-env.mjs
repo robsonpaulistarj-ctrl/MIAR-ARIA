@@ -4,7 +4,7 @@ const allowEphemeralStorage = process.env.ALLOW_EPHEMERAL_STORAGE === 'true';
 const requiredInProduction = ['MIAR_ACCESS_TOKEN', 'WEB_ORIGIN', 'STORAGE_PROVIDER'];
 const missing = requiredInProduction.filter((key) => !process.env[key]?.trim());
 if (!allowEphemeralDb && !process.env.DATABASE_URL?.trim()) missing.push('DATABASE_URL');
-if (!allowEphemeralStorage) {
+if (!allowEphemeralStorage && process.env.STORAGE_PROVIDER === 's3') {
   for (const key of ['STORAGE_BUCKET', 'STORAGE_ACCESS_KEY_ID', 'STORAGE_SECRET_ACCESS_KEY']) {
     if (!process.env[key]?.trim()) missing.push(key);
   }
@@ -26,8 +26,8 @@ if (process.env.AI_MODE !== 'demo' && !process.env.OPENAI_API_KEY?.trim()) {
   process.exit(1);
 }
 
-if (process.env.STORAGE_PROVIDER !== 's3' && !(allowEphemeralStorage && process.env.STORAGE_PROVIDER === 'local')) {
-  console.error('Production storage must use s3, or local storage with ALLOW_EPHEMERAL_STORAGE=true for private staging.');
+if (!['s3', 'database'].includes(process.env.STORAGE_PROVIDER ?? '') && !(allowEphemeralStorage && process.env.STORAGE_PROVIDER === 'local')) {
+  console.error('Production storage must use s3 or database, or local storage with ALLOW_EPHEMERAL_STORAGE=true for private staging.');
   process.exit(1);
 }
 
@@ -44,6 +44,9 @@ if (allowEphemeralDb) {
 }
 if (allowEphemeralStorage) {
   warnings.push('ALLOW_EPHEMERAL_STORAGE=true: attachments use the local filesystem and may be lost on redeploy.');
+}
+if (process.env.STORAGE_PROVIDER === 'database') {
+  warnings.push('STORAGE_PROVIDER=database: attachment bytes are stored in PostgreSQL and count toward database storage.');
 }
 
 console.log('Staging preflight passed.');

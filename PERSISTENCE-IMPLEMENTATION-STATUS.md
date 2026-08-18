@@ -42,3 +42,9 @@ A documentação oficial do Render confirma que o plano Free pode alojar Web Ser
 A documentação também confirma que serviços Free podem reiniciar ou dormir por inactividade e que o filesystem é efémero, mas que dados relacionais podem ser persistidos no Render Postgres. O PostgreSQL Free tem, contudo, limite de 30 dias e não oferece backups; isto deve ser tratado como staging temporário.
 
 Fontes: https://render.com/docs/free (Deploy for Free — Preview the Render platform with free web services and datastores); https://render.com/docs/deploys (Deploying on Render — Understand how deploys work); https://render.com/docs/web-services (Web Services — Host dynamic web apps).
+
+## Persistência dos anexos — implementação concluída no código
+
+A implementação foi ampliada para usar `STORAGE_PROVIDER=database`: a nova tabela PostgreSQL `attachments` guarda utilizador, chave, nome, MIME type, tamanho, checksum e bytes do ficheiro em `bytea`. A rota existente de upload/download continua a ser usada, mas agora grava e lê do PostgreSQL. O provider S3 permanece disponível como alternativa futura; o armazenamento local fica reservado para desenvolvimento ou staging efémero.
+
+Foi gerada a migração `lib/db/drizzle/0002_marvelous_madame_web.sql`. O preflight agora aceita `database`, não exige credenciais S3 nesse modo e avisa que o espaço de anexos conta para o limite do PostgreSQL. Typecheck e builds da API e do frontend passaram. A migração e o teste real de upload no serviço publicado ainda dependem do próximo deploy e da execução de `pnpm db:migrate` no Render.

@@ -1,7 +1,9 @@
 import { GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { and, eq } from 'drizzle-orm';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { createHash, randomUUID } from 'node:crypto';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
+import { attachmentsTable, db, requireDb } from '@workspace/db';
 
 const maxAttachmentBytes = 25 * 1024 * 1024;
 const storageProvider = (process.env.STORAGE_PROVIDER ?? 'local').trim().toLowerCase();
@@ -12,8 +14,11 @@ const region = process.env.STORAGE_REGION?.trim() || 'auto';
 const endpoint = process.env.STORAGE_ENDPOINT?.trim();
 const forcePathStyle = process.env.STORAGE_FORCE_PATH_STYLE === 'true';
 
-if (process.env.NODE_ENV === 'production' && storageProvider !== 's3' && !(allowEphemeralStorage && storageProvider === 'local')) {
-  throw new Error('STORAGE_PROVIDER=s3 is required in production unless ALLOW_EPHEMERAL_STORAGE=true is explicitly enabled for private staging.');
+if (process.env.NODE_ENV === 'production' && !['s3', 'database'].includes(storageProvider) && !(allowEphemeralStorage && storageProvider === 'local')) {
+  throw new Error('Production storage must use STORAGE_PROVIDER=s3 or STORAGE_PROVIDER=database unless ALLOW_EPHEMERAL_STORAGE=true is explicitly enabled for private staging.');
+}
+if (storageProvider === 'database' && !db) {
+  throw new Error('STORAGE_PROVIDER=database requires DATABASE_URL.');
 }
 if (storageProvider === 's3' && (!bucket || !process.env.STORAGE_ACCESS_KEY_ID?.trim() || !process.env.STORAGE_SECRET_ACCESS_KEY?.trim())) {
   throw new Error('S3 storage requires STORAGE_BUCKET, STORAGE_ACCESS_KEY_ID and STORAGE_SECRET_ACCESS_KEY.');
@@ -72,34 +77,45 @@ export async function storeAttachment(input: {
   type: string;
   size: number;
   buffer: Buffer;
-}) : Promise<StoredAttachment> {
+}): Promise<StoredAttachment> {
   if (input.size <= 0 || input.size > maxAttachmentBytes) throw new Error('Attachment size is invalid.');
   if (input.buffer.length !== input.size) throw new Error('Attachment payload size does not match metadata.');
 
   const id = randomUUID();
   const key = `${input.userId}/${id}-${safeFileName(input.name)}`;
   const checksum = createHash('sha256').update(input.buffer).digest('hex');
+  const type = input.type || 'application/octet-stream';
 
   if (storageProvider === 's3') {
     await s3!.send(new PutObjectCommand({
       Bucket: bucket,
       Key: key,
       Body: input.buffer,
-      ContentType: input.type || 'application/octet-stream',
+      ContentType: type,
       ContentLength: input.size,
       Metadata: { userId: input.userId, checksum },
     }));
+  } else if (storageProvider === 'database') {
+    await requireDb().insert(attachmentsTable).values({
+      userId: input.userId,
+      key,
+      name: input.name,
+      type,
+      size: input.size,
+      checksum,
+      data: input.buffer,
+    });
   } else {
     const path = localPathForKey(key);
     await mkdir(dirname(path), { recursive: true });
     await writeFile(path, input.buffer, { flag: 'wx' });
-    await writeFile(`${path}.meta.json`, JSON.stringify({ contentType: input.type || 'application/octet-stream', size: input.size }), { flag: 'wx' });
+    await writeFile(`${path}.meta.json`, JSON.stringify({ contentType: type, size: input.size }), { flag: 'wx' });
   }
 
   return {
     id,
     name: input.name,
-    type: input.type || 'application/octet-stream',
+    type,
     size: input.size,
     key,
     url: `/api/uploads/${encodeKey(key)}`,
@@ -115,6 +131,21 @@ async function readAttachmentByKey(userId: string, key: string) {
       body: object.Body as NodeJS.ReadableStream,
       contentType: object.ContentType ?? 'application/octet-stream',
       contentLength: object.ContentLength,
+    };
+  }
+
+  if (storageProvider === 'database') {
+    const rows = await requireDb()
+      .select({ body: attachmentsTable.data, contentType: attachmentsTable.type, contentLength: attachmentsTable.size })
+      .from(attachmentsTable)
+      .where(and(eq(attachmentsTable.userId, userId), eq(attachmentsTable.key, safeKey)))
+      .limit(1);
+    const attachment = rows[0];
+    if (!attachment) throw new Error('Attachment not found.');
+    return {
+      body: attachment.body as Buffer,
+      contentType: attachment.contentType,
+      contentLength: attachment.contentLength,
     };
   }
 
