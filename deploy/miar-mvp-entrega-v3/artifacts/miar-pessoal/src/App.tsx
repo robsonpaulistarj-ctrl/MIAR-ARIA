@@ -227,6 +227,7 @@ function Home() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const recognitionRef = useRef<any>(null);
   const idleTimerRef = useRef<number | null>(null);
+  const sendMessageRef = useRef<((textOverride?: string) => Promise<void>) | null>(null);
   const channelRef = useRef<BroadcastChannel | null>(null);
 
   const activeStory = useMemo(() => stories.find((story) => story.id === selectedStoryId) ?? stories[0], [selectedStoryId, stories]);
@@ -287,6 +288,7 @@ function Home() {
           idleTimerRef.current = window.setTimeout(() => {
             recognition.stop();
             setIsListening(false);
+            void sendMessageRef.current?.(transcript);
           }, 3000);
         }
       };
@@ -688,8 +690,8 @@ function Home() {
     setSelectedConversationId(conversation.id);
   };
 
-  const sendMessage = async () => {
-    const text = draft.trim();
+  const sendMessage = async (textOverride?: string) => {
+    const text = (textOverride ?? draft).trim();
     if (!text) return;
     const story = activeStory;
     const pendingAttachments = attachments.length ? attachments : [];
@@ -765,6 +767,8 @@ function Home() {
       : conversation));
     if (voiceEnabled) speakText(fallbackReply);
   };
+
+  sendMessageRef.current = sendMessage;
 
   const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files ?? []);
@@ -846,7 +850,7 @@ function Home() {
             <div className={`rounded-2xl border px-3 py-3 ${isDark ? 'border-white/10 bg-slate-800/70' : 'border-[#e2ebda] bg-white'}`}>
               <div className="flex items-center justify-between">
                 <div className="text-sm font-semibold">Histórias</div>
-                <button type="button" onClick={() => setShowNewStoryModal(true)} className={`rounded-full p-2 ${isDark ? 'bg-emerald-500/20 text-emerald-300' : 'bg-emerald-50 text-emerald-700'}`}>
+                <button type="button" onClick={() => { setShowNewStoryModal(true); setSidebarCollapsed(true); }} className={`rounded-full p-2 ${isDark ? 'bg-emerald-500/20 text-emerald-300' : 'bg-emerald-50 text-emerald-700'}`}>
                   <Plus size={15} />
                 </button>
               </div>
@@ -856,7 +860,10 @@ function Home() {
                     <button
                       key={story.id}
                       type="button"
-                      onClick={() => setSelectedStoryId(story.id)}
+                      onClick={() => {
+                        setSelectedStoryId(story.id);
+                        setSidebarCollapsed(true);
+                      }}
                       className={`flex w-full items-start gap-2 rounded-2xl border px-3 py-3 text-left ${selectedStoryId === story.id ? (isDark ? 'border-emerald-400/50 bg-emerald-500/10' : 'border-emerald-300 bg-emerald-50') : (isDark ? 'border-white/10 bg-slate-800/50' : 'border-[#e8efe1] bg-[#fbfdf8]')}`}
                     >
                       <span className="mt-1 h-2.5 w-2.5 rounded-full" style={{ backgroundColor: story.color }} />
@@ -997,14 +1004,14 @@ function Home() {
               <div className="flex items-center justify-between text-sm">
                 <div className="flex items-center gap-2">
                   <AudioLines size={14} />
-                  control panel de voz e anexos
+                  Voz, câmera e anexos
                 </div>
                 <div className="flex items-center gap-2">
-                  <button type="button" onClick={() => setVoiceEnabled((value) => !value)} className={`rounded-full p-2 ${voiceEnabled ? (isDark ? 'bg-emerald-500/20 text-emerald-300' : 'bg-emerald-50 text-emerald-700') : (isDark ? 'bg-slate-700' : 'bg-white')}`}>
+                  <button type="button" onClick={() => setVoiceEnabled((value) => !value)} className={`rounded-full p-2 ${voiceEnabled ? (isDark ? 'bg-emerald-500/20 text-emerald-300' : 'bg-emerald-50 text-emerald-700') : (isDark ? 'bg-slate-700' : 'bg-white')}`} title={voiceEnabled ? 'Desligar voz automática' : 'Ligar voz automática'} aria-label={voiceEnabled ? 'Desligar voz automática' : 'Ligar voz automática'}>
                     {voiceEnabled ? <Volume2 size={15} /> : <VolumeX size={15} />}
                   </button>
-                  <button type="button" onClick={toggleCamera} className={`rounded-full p-2 ${cameraOpen ? (isDark ? 'bg-emerald-500/20 text-emerald-300' : 'bg-emerald-50 text-emerald-700') : (isDark ? 'bg-slate-700' : 'bg-white')}`}>
-                    {cameraOpen ? <Camera size={15} /> : <CameraOff size={15} />}
+                  <button type="button" onClick={toggleCamera} className={`flex items-center gap-1 rounded-full px-3 py-2 text-xs font-semibold ${cameraOpen ? (isDark ? 'bg-emerald-500/20 text-emerald-300' : 'bg-emerald-50 text-emerald-700') : (isDark ? 'bg-slate-700' : 'bg-white')}`} title="Abrir ou fechar a câmera ao vivo" aria-label="Câmera ao vivo">
+                    {cameraOpen ? <Camera size={15} /> : <CameraOff size={15} />} live
                   </button>
                 </div>
               </div>
@@ -1048,7 +1055,7 @@ function Home() {
                   className={`min-h-[56px] flex-1 resize-none rounded-[18px] border px-3 py-3 text-sm outline-none ${isDark ? 'border-white/10 bg-slate-900 text-slate-100' : 'border-[#e3ebdc] bg-white text-slate-700'}`}
                   rows={1}
                 />
-                <button type="button" onClick={sendMessage} className={`rounded-[18px] p-3 ${isDark ? 'bg-emerald-500/20 text-emerald-300' : 'bg-emerald-50 text-emerald-700'}`}>
+                <button type="button" onClick={() => void sendMessage()} className={`rounded-[18px] p-3 ${isDark ? 'bg-emerald-500/20 text-emerald-300' : 'bg-emerald-50 text-emerald-700'}`} aria-label="Enviar mensagem">
                   <Send size={16} />
                 </button>
               </div>
