@@ -58,6 +58,8 @@ services:
     runtime: static
     rootDir: deploy/miar-mvp-entrega-v3
     branch: staging/mvp-deploy-final
+    plan: free
+    autoDeployTrigger: commit
     buildCommand: pnpm install --frozen-lockfile && pnpm --filter ./artifacts/miar-pessoal build
     staticPublishPath: ./artifacts/miar-pessoal/dist/public
     envVars:
