@@ -20,6 +20,10 @@ services:
         value: public@miar.local
       - key: MIAR_ACCESS_TOKEN
         generateValue: true
+      - key: MIAR_SECRETS_KEY
+        generateValue: true
+      - key: MIAR_SETTINGS_TOKEN
+        generateValue: true
       - key: OPENAI_API_KEY
         sync: false
       - key: OPENAI_API_BASE

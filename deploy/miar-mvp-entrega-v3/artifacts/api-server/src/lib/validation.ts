@@ -26,6 +26,7 @@ export const sendMessageSchema = z.object({
   content: z.string().trim().min(1).max(20000),
   attachments: z.array(attachmentSchema).max(10).default([]),
   useAllHistory: z.boolean().default(false),
+  useAllStoryConversations: z.boolean().default(false),
 });
 
 export function parseBody<T>(schema: z.ZodType<T>, body: unknown): T {

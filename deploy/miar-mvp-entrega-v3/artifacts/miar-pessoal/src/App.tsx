@@ -2,18 +2,14 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import NotFound from '@/pages/not-found';
-import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent, type PointerEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
 import {
-  AudioLines,
   BookOpen,
   Bot,
   Camera,
   CameraOff,
-  Check,
+  AudioLines,
   Clock3,
-  Copy,
-  Grip,
-  Layers3,
   Menu,
   Mic,
   MicOff,
@@ -22,27 +18,32 @@ import {
   Play,
   Plus,
   Send,
-  Settings2,
+  Settings,
   Sparkles,
   Square,
   SunMedium,
-  Trash2,
   Volume2,
   VolumeX,
   X,
-  Zap,
 } from 'lucide-react';
 import { Route, Switch, Router as WouterRouter } from 'wouter';
 import {
+  addAiProviderKey,
   createRemoteConversation,
   createRemoteStory,
+  deleteAiProviderKey,
+  getAiProviderSettings,
   getCurrentUser,
   getRemoteConversation,
   listRemoteConversations,
   listRemoteStories,
+  selectAiProvider,
   sendRemoteMessage,
   subscribeRemoteConversation,
+  updateAiProviderKey,
   uploadRemoteAttachment,
+  type AiProviderKey,
+  type AiProviderSettings,
   type RemoteAttachment,
   type RemoteConversation,
   type RemoteStory,
@@ -202,10 +203,6 @@ function Home() {
   const [newStoryDescription, setNewStoryDescription] = useState('');
   const [newStoryColor, setNewStoryColor] = useState('#3F8F4F');
   const [newStoryReadAll, setNewStoryReadAll] = useState(true);
-  const [draggingControlBar, setDraggingControlBar] = useState(false);
-  const [controlBarPosition, setControlBarPosition] = useState({ x: 24, y: 24 });
-  const [draggingHelper, setDraggingHelper] = useState(false);
-  const [helperPosition, setHelperPosition] = useState({ x: 24, y: 140 });
   const [copiedAll, setCopiedAll] = useState(false);
   const [useAllHistory, setUseAllHistory] = useState(false);
   const [backendStatus, setBackendStatus] = useState<'local' | 'connected' | 'error'>('local');
@@ -214,6 +211,17 @@ function Home() {
   const [authEmail, setAuthEmail] = useState('');
   const [authToken, setAuthToken] = useState('');
   const [authError, setAuthError] = useState<string | null>(null);
+  const [showSettings, setShowSettings] = useState(false);
+  const [settingsToken, setSettingsToken] = useState(() => window.localStorage.getItem('miar-settings-token') ?? '');
+  const [aiSettings, setAiSettings] = useState<AiProviderSettings | null>(null);
+  const [settingsError, setSettingsError] = useState<string | null>(null);
+  const [settingsBusy, setSettingsBusy] = useState(false);
+  const [newProvider, setNewProvider] = useState('gemini');
+  const [newProviderLabel, setNewProviderLabel] = useState('');
+  const [newProviderKey, setNewProviderKey] = useState('');
+  const [showNewProviderKey, setShowNewProviderKey] = useState(false);
+  const [editingKeyId, setEditingKeyId] = useState<string | null>(null);
+  const [editingKeyValue, setEditingKeyValue] = useState('');
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -529,6 +537,97 @@ function Home() {
     }
   };
 
+  const loadAiSettings = async () => {
+    const token = settingsToken.trim();
+    if (!token) {
+      setSettingsError('Cole o token de configurações do Render para gerir as APIs.');
+      return;
+    }
+    setSettingsBusy(true);
+    setSettingsError(null);
+    try {
+      const next = await getAiProviderSettings(token);
+      setAiSettings(next);
+      window.localStorage.setItem('miar-settings-token', token);
+    } catch (error) {
+      setSettingsError(error instanceof Error ? error.message : 'Não foi possível carregar as configurações das APIs.');
+    } finally {
+      setSettingsBusy(false);
+    }
+  };
+
+  const addProviderKey = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!newProviderKey.trim()) return;
+    setSettingsBusy(true);
+    setSettingsError(null);
+    try {
+      const created = await addAiProviderKey(settingsToken.trim(), { provider: newProvider, label: newProviderLabel || undefined, key: newProviderKey });
+      setAiSettings((current) => current ? { ...current, keys: [...current.keys, created] } : current);
+      setNewProviderKey('');
+      setNewProviderLabel('');
+    } catch (error) {
+      setSettingsError(error instanceof Error ? error.message : 'Não foi possível guardar a chave.');
+    } finally {
+      setSettingsBusy(false);
+    }
+  };
+
+  const toggleProviderKey = async (key: AiProviderKey) => {
+    setSettingsBusy(true);
+    setSettingsError(null);
+    try {
+      const updated = await updateAiProviderKey(settingsToken.trim(), key.id, { enabled: !key.enabled });
+      setAiSettings((current) => current ? { ...current, keys: current.keys.map((item) => item.id === updated.id ? updated : item) } : current);
+    } catch (error) {
+      setSettingsError(error instanceof Error ? error.message : 'Não foi possível alterar o estado da chave.');
+    } finally {
+      setSettingsBusy(false);
+    }
+  };
+
+  const saveProviderKey = async (key: AiProviderKey) => {
+    setSettingsBusy(true);
+    setSettingsError(null);
+    try {
+      const updated = await updateAiProviderKey(settingsToken.trim(), key.id, { key: editingKeyValue });
+      setAiSettings((current) => current ? { ...current, keys: current.keys.map((item) => item.id === updated.id ? updated : item) } : current);
+      setEditingKeyId(null);
+      setEditingKeyValue('');
+    } catch (error) {
+      setSettingsError(error instanceof Error ? error.message : 'Não foi possível editar a chave.');
+    } finally {
+      setSettingsBusy(false);
+    }
+  };
+
+  const removeProviderKey = async (key: AiProviderKey) => {
+    if (!window.confirm(`Excluir a chave ${key.label}?`)) return;
+    setSettingsBusy(true);
+    setSettingsError(null);
+    try {
+      await deleteAiProviderKey(settingsToken.trim(), key.id);
+      setAiSettings((current) => current ? { ...current, keys: current.keys.filter((item) => item.id !== key.id) } : current);
+    } catch (error) {
+      setSettingsError(error instanceof Error ? error.message : 'Não foi possível excluir a chave.');
+    } finally {
+      setSettingsBusy(false);
+    }
+  };
+
+  const chooseAiProvider = async (provider: string) => {
+    setSettingsBusy(true);
+    setSettingsError(null);
+    try {
+      const selected = await selectAiProvider(settingsToken.trim(), { provider });
+      setAiSettings((current) => current ? { ...current, ...selected } : current);
+    } catch (error) {
+      setSettingsError(error instanceof Error ? error.message : 'Não foi possível seleccionar o fornecedor.');
+    } finally {
+      setSettingsBusy(false);
+    }
+  };
+
   const createStory = async () => {
     if (!newStoryName.trim()) return;
     const input = {
@@ -595,7 +694,7 @@ function Home() {
     const story = activeStory;
     const pendingAttachments = attachments.length ? attachments : [];
     const localUserMessage = createMessage('user', text, pendingAttachments);
-    const fallbackReply = `[Modo local] Recebi a sua mensagem sobre “${story?.name ?? 'história'}”. Configure o backend e OPENAI_API_KEY para ativar a resposta real da IA.`;
+    const fallbackReply = `[Modo demo] Recebi a sua mensagem sobre “${story?.name ?? 'história'}”. Configure uma API activa em Configurações → APIs e modelos para activar a resposta real da IA.`;
     const localAssistantMessage = createMessage('assistant', fallbackReply);
     let remoteConversationId = selectedConversationId;
 
@@ -644,6 +743,7 @@ function Home() {
           content: text,
           attachments: uploadedAttachments,
           useAllHistory: useAllHistory || readAllStories,
+          useAllStoryConversations: activeStory?.readAllBeforeAnswer ?? false,
         });
         const full = await getRemoteConversation(remoteConversationId);
         const remoteConversation = mapRemoteConversation(full);
@@ -694,56 +794,6 @@ function Home() {
     await navigator.clipboard.writeText(content);
     setCopiedAll(true);
     window.setTimeout(() => setCopiedAll(false), 1400);
-  };
-
-  const toggleProvider = (id: string) => {
-    setProviders((current) => current.map((provider) => (provider.id === id ? { ...provider, enabled: !provider.enabled } : provider)));
-  };
-
-  const deleteProvider = (id: string) => {
-    setProviders((current) => current.filter((provider) => provider.id !== id));
-  };
-
-  const updateProvider = (id: string, nextName: string) => {
-    setProviders((current) => current.map((provider) => (provider.id === id ? { ...provider, name: nextName } : provider)));
-  };
-
-  const deleteMemory = (id: string) => {
-    setMemories((current) => current.filter((memory) => memory.id !== id));
-  };
-
-  const startDraggingControlBar = (event: PointerEvent) => {
-    setDraggingControlBar(true);
-    event.currentTarget.setPointerCapture(event.pointerId);
-  };
-
-  const stopDraggingControlBar = (event: PointerEvent) => {
-    setDraggingControlBar(false);
-    event.currentTarget.releasePointerCapture?.(event.pointerId);
-  };
-
-  const moveControlBar = (event: PointerEvent) => {
-    if (!draggingControlBar) return;
-    const nextX = Math.max(12, Math.min(window.innerWidth - 360, event.clientX - 160));
-    const nextY = Math.max(12, Math.min(window.innerHeight - 220, event.clientY - 90));
-    setControlBarPosition({ x: nextX, y: nextY });
-  };
-
-  const startDraggingHelper = (event: PointerEvent) => {
-    setDraggingHelper(true);
-    event.currentTarget.setPointerCapture(event.pointerId);
-  };
-
-  const stopDraggingHelper = (event: PointerEvent) => {
-    setDraggingHelper(false);
-    event.currentTarget.releasePointerCapture?.(event.pointerId);
-  };
-
-  const moveHelper = (event: PointerEvent) => {
-    if (!draggingHelper) return;
-    const nextX = Math.max(12, Math.min(window.innerWidth - 140, event.clientX - 70));
-    const nextY = Math.max(12, Math.min(window.innerHeight - 70, event.clientY - 20));
-    setHelperPosition({ x: nextX, y: nextY });
   };
 
   if (authRequired && !authReady) {
@@ -820,65 +870,18 @@ function Home() {
               )}
             </div>
 
-            <div className={`mt-3 rounded-2xl border px-3 py-3 ${isDark ? 'border-white/10 bg-slate-800/70' : 'border-[#e2ebda] bg-white'}`}>
-              <div className="flex items-center gap-2 text-sm font-semibold">
-                <Settings2 size={15} />
-                {!sidebarCollapsed && 'Modelos e APIs'}
-              </div>
-              {!sidebarCollapsed && (
-                <div className="mt-3 space-y-2">
-                  {providers.map((provider) => (
-                    <div key={provider.id} className={`rounded-2xl border p-2 ${isDark ? 'border-white/10 bg-slate-900/60' : 'border-[#e6eedf] bg-[#fafdf8]'}`}>
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: provider.color }} />
-                          <span className="text-sm font-semibold">{provider.name}</span>
-                        </div>
-                        <label className="flex items-center gap-2 text-xs">
-                          <input type="checkbox" checked={provider.enabled} onChange={() => toggleProvider(provider.id)} />
-                          ativo
-                        </label>
-                      </div>
-                      <div className="mt-2 flex items-center gap-2">
-                        <button type="button" onClick={() => updateProvider(provider.id, provider.name)} className="rounded-full border px-2 py-1 text-xs">editar</button>
-                        <button type="button" onClick={() => toggleProvider(provider.id)} className="rounded-full border px-2 py-1 text-xs">desligar</button>
-                        <button type="button" onClick={() => deleteProvider(provider.id)} className="rounded-full border px-2 py-1 text-xs">excluir</button>
-                      </div>
-                      <div className={`mt-2 text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                        {provider.freeRequests} gratuitas · {provider.visible ? 'visível' : 'oculta'}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <div className={`mt-3 rounded-2xl border px-3 py-3 ${isDark ? 'border-white/10 bg-slate-800/70' : 'border-[#e2ebda] bg-white'}`}>
-              <div className="flex items-center gap-2 text-sm font-semibold">
-                <Layers3 size={15} />
-                {!sidebarCollapsed && 'Memória infinita'}
-              </div>
-              {!sidebarCollapsed && (
-                <div className="mt-3 space-y-2">
-                  {memories.length === 0 ? (
-                    <div className={`rounded-2xl border border-dashed p-3 text-xs ${isDark ? 'border-white/10 text-slate-400' : 'border-[#e1e8d9] text-slate-500'}`}>
-                      Nenhuma memória registrada. Tudo que você salvar vai ficar aqui para ser lembrado depois.
-                    </div>
-                  ) : (
-                    memories.slice(0, 4).map((memory) => (
-                      <div key={memory.id} className={`rounded-2xl border p-2 text-xs ${isDark ? 'border-white/10 bg-slate-900/60' : 'border-[#e7efdf] bg-[#fbfdf8]'}`}>
-                        <div className="flex items-start justify-between gap-2">
-                          <div>{memory.content}</div>
-                          <button type="button" onClick={() => deleteMemory(memory.id)} className="shrink-0 text-red-500">
-                            <Trash2 size={13} />
-                          </button>
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-              )}
-            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setShowSettings(true);
+                setSidebarCollapsed(true);
+              }}
+              className={`mt-3 flex w-full items-center gap-2 rounded-2xl border px-3 py-3 text-left text-sm font-semibold ${isDark ? 'border-white/10 bg-slate-800/70 text-slate-100' : 'border-[#e2ebda] bg-white text-slate-700'}`}
+              title="Configurações"
+            >
+              <Settings size={16} />
+              {!sidebarCollapsed && 'Configurações'}
+            </button>
           </div>
         </aside>
 
@@ -895,17 +898,7 @@ function Home() {
               <button type="button" onClick={() => setIsDark((value) => !value)} className={`rounded-full border p-2 ${isDark ? 'border-white/10 bg-slate-800' : 'border-[#e2ebda] bg-white'}`}>
                 {isDark ? <SunMedium size={16} /> : <Moon size={16} />}
               </button>
-              <button type="button" onClick={() => setIsLiveMode((value) => !value)} className={`rounded-full px-3 py-2 text-sm font-semibold ${isLiveMode ? (isDark ? 'bg-emerald-500/20 text-emerald-300' : 'bg-emerald-50 text-emerald-700') : (isDark ? 'bg-slate-800 text-slate-300' : 'bg-white text-slate-600')}`}>
-                {isLiveMode ? 'Live ON' : 'Live OFF'}
-              </button>
-              <button type="button" onClick={() => setReadAllStories((value) => !value)} className={`rounded-full px-3 py-2 text-sm font-semibold ${readAllStories ? (isDark ? 'bg-sky-500/20 text-sky-300' : 'bg-sky-50 text-sky-700') : (isDark ? 'bg-slate-800 text-slate-300' : 'bg-white text-slate-600')}`}>
-                {readAllStories ? 'ler todas as histórias' : 'contexto local'}
-              </button>
-              <span className={`rounded-full px-3 py-2 text-xs font-semibold ${backendStatus === 'connected' ? 'bg-emerald-100 text-emerald-700' : backendStatus === 'error' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600'}`}>
-                {backendStatus === 'connected' ? 'backend conectado' : backendStatus === 'error' ? 'modo local' : 'a ligar…'}
-              </span>
             </div>
-            {backendError && <div className="mt-2 w-full text-right text-xs text-amber-700">{backendError}</div>}
           </header>
 
           <div className="grid gap-4 px-4 py-4 lg:grid-cols-[1.3fr_0.7fr]">
@@ -946,26 +939,6 @@ function Home() {
               </div>
             </section>
 
-            <section className={`rounded-[24px] border ${isDark ? 'border-white/10 bg-slate-900/70' : 'border-[#e4ecd7] bg-white'} p-4`}>
-              <div className="flex items-center gap-2 text-sm font-semibold">
-                <Zap size={15} />
-                Painel de funções
-              </div>
-              <div className="mt-3 space-y-2 text-sm">
-                <div className={`rounded-2xl border p-3 ${isDark ? 'border-white/10 bg-slate-800/70' : 'border-[#e6eedf] bg-[#fbfdf8]'}`}>
-                  <div className="font-semibold">Anexos sem limite</div>
-                  <div className={`mt-1 text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Você pode carregar arquivos e imagens para a IA trabalhar.</div>
-                </div>
-                <div className={`rounded-2xl border p-3 ${isDark ? 'border-white/10 bg-slate-800/70' : 'border-[#e6eedf] bg-[#fbfdf8]'}`}>
-                  <div className="font-semibold">Câmera externa e interna</div>
-                  <div className={`mt-1 text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Ative a câmera e veja o que ela enxerga em tempo real.</div>
-                </div>
-                <div className={`rounded-2xl border p-3 ${isDark ? 'border-white/10 bg-slate-800/70' : 'border-[#e6eedf] bg-[#fbfdf8]'}`}>
-                  <div className="font-semibold">Leitura de voz feminina</div>
-                  <div className={`mt-1 text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Velocidade de 0x até 3x com pause e stop.</div>
-                </div>
-              </div>
-            </section>
           </div>
 
           <section className={`mx-4 mb-4 rounded-[28px] border ${isDark ? 'border-white/10 bg-slate-900/70' : 'border-[#e4ecd7] bg-white'} p-4`}>
@@ -1093,35 +1066,93 @@ function Home() {
         </main>
       </div>
 
-      <button
-        type="button"
-        onPointerDown={startDraggingHelper}
-        onPointerMove={moveHelper}
-        onPointerUp={stopDraggingHelper}
-        onPointerLeave={stopDraggingHelper}
-        onClick={() => {
-          setUseAllHistory(true);
-          setReadAllStories(true);
-        }}
-        className={`fixed z-40 flex items-center gap-2 rounded-full border px-3 py-2 shadow-lg ${isDark ? 'border-white/10 bg-slate-800 text-slate-100' : 'border-[#e0ebd8] bg-white text-slate-700'}`}
-        style={{ left: helperPosition.x, top: helperPosition.y }}
-      >
-        <Grip size={15} />
-        <span className="text-sm font-semibold">contexto total</span>
-      </button>
 
-      <div
-        onPointerDown={startDraggingControlBar}
-        onPointerMove={moveControlBar}
-        onPointerUp={stopDraggingControlBar}
-        onPointerLeave={stopDraggingControlBar}
-        className={`fixed z-30 rounded-[24px] border p-3 shadow-xl ${isDark ? 'border-white/10 bg-slate-900/95 text-slate-100' : 'border-[#dfe9d9] bg-white/95 text-slate-700'}`}
-        style={{ left: controlBarPosition.x, top: controlBarPosition.y }}
-      >
-        <div className="flex items-center gap-2 text-sm font-semibold">
-          <Grip size={14} /> controles arrastáveis
+      {showSettings && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4 pt-8" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowSettings(false); }}>
+          <div className={`w-full max-w-2xl rounded-[28px] border p-5 shadow-2xl ${isDark ? 'border-white/10 bg-slate-900 text-slate-100' : 'border-[#e4ecd7] bg-white text-slate-800'}`}>
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="flex items-center gap-2 text-lg font-semibold"><Settings size={18} /> Configurações</div>
+                <div className={`mt-1 text-sm ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>As opções ficam aqui para não poluir a conversa.</div>
+              </div>
+              <button type="button" onClick={() => setShowSettings(false)} className="rounded-full p-2 hover:bg-black/10" aria-label="Fechar configurações"><X size={18} /></button>
+            </div>
+
+            <section className={`mt-5 rounded-2xl border p-4 ${isDark ? 'border-white/10 bg-slate-800/70' : 'border-[#e5eddc] bg-[#fbfdf8]'}`}>
+              <div className="text-sm font-semibold">Contexto da IA</div>
+              <div className={`mt-1 text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Escolha o que a IA deve ler antes de responder.</div>
+              <label className="mt-3 flex items-start gap-2 text-sm">
+                <input type="checkbox" checked={readAllStories} onChange={(event) => setReadAllStories(event.target.checked)} className="mt-1" />
+                <span><strong>Ler todas as histórias</strong><span className="block text-xs opacity-70">Inclui o contexto das outras histórias.</span></span>
+              </label>
+              <label className="mt-3 flex items-start gap-2 text-sm">
+                <input type="checkbox" checked={activeStory?.readAllBeforeAnswer ?? false} onChange={(event) => setStories((current) => current.map((story) => story.id === activeStory?.id ? { ...story, readAllBeforeAnswer: event.target.checked } : story))} className="mt-1" />
+                <span><strong>Ler todas as conversas desta história</strong><span className="block text-xs opacity-70">Inclui as conversas anteriores da história seleccionada.</span></span>
+              </label>
+            </section>
+
+            <section className={`mt-4 rounded-2xl border p-4 ${isDark ? 'border-white/10 bg-slate-800/70' : 'border-[#e5eddc] bg-[#fbfdf8]'}`}>
+              <div className="text-sm font-semibold">APIs e modelos</div>
+              <div className={`mt-1 text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>As chaves ficam no servidor. O navegador só recebe o fornecedor e os últimos quatro caracteres.</div>
+              <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                <input type="password" value={settingsToken} onChange={(event) => setSettingsToken(event.target.value)} placeholder="Token de configurações do Render" className={`flex-1 rounded-xl border px-3 py-2 text-sm ${isDark ? 'border-white/10 bg-slate-900' : 'border-[#e2ebda] bg-white'}`} />
+                <button type="button" onClick={() => void loadAiSettings()} disabled={settingsBusy} className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{settingsBusy ? 'a carregar…' : 'carregar APIs'}</button>
+              </div>
+              {settingsError && <div role="alert" className="mt-3 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{settingsError}</div>}
+
+              <form onSubmit={addProviderKey} className="mt-4 grid gap-2 sm:grid-cols-[140px_1fr_1.5fr_auto]">
+                <select value={newProvider} onChange={(event) => setNewProvider(event.target.value)} className={`rounded-xl border px-3 py-2 text-sm ${isDark ? 'border-white/10 bg-slate-900' : 'border-[#e2ebda] bg-white'}`}>
+                  <option value="gemini">Gemini</option>
+                  <option value="groq">Groq</option>
+                  <option value="mistral">Mistral</option>
+                  <option value="openrouter">OpenRouter</option>
+                  <option value="mem0">Mem0</option>
+                  <option value="openai">OpenAI</option>
+                </select>
+                <input value={newProviderLabel} onChange={(event) => setNewProviderLabel(event.target.value)} placeholder="Nome opcional" className={`rounded-xl border px-3 py-2 text-sm ${isDark ? 'border-white/10 bg-slate-900' : 'border-[#e2ebda] bg-white'}`} />
+                <div className="relative">
+                  <input type={showNewProviderKey ? 'text' : 'password'} value={newProviderKey} onChange={(event) => setNewProviderKey(event.target.value)} placeholder="Nova chave da API" className={`w-full rounded-xl border px-3 py-2 pr-10 text-sm ${isDark ? 'border-white/10 bg-slate-900' : 'border-[#e2ebda] bg-white'}`} />
+                  <button type="button" onClick={() => setShowNewProviderKey((value) => !value)} className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-xs opacity-70">{showNewProviderKey ? 'ocultar' : 'ver'}</button>
+                </div>
+                <button type="submit" disabled={settingsBusy || !settingsToken.trim() || !newProviderKey.trim()} className="rounded-xl bg-emerald-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">adicionar</button>
+              </form>
+
+              {aiSettings && (
+                <div className="mt-4 space-y-2">
+                  <div className="flex flex-wrap items-center gap-2 text-xs">
+                    <span className="font-semibold">Fornecedor activo:</span>
+                    <select value={aiSettings.activeProvider} onChange={(event) => void chooseAiProvider(event.target.value)} className={`rounded-lg border px-2 py-1 ${isDark ? 'border-white/10 bg-slate-900' : 'border-[#e2ebda] bg-white'}`}>
+                      {['gemini', 'groq', 'mistral', 'openrouter', 'openai'].map((provider) => <option key={provider} value={provider}>{provider}</option>)}
+                    </select>
+                    <span className="opacity-70">modelo: {aiSettings.activeModel || 'não definido'}</span>
+                  </div>
+                  {aiSettings.keys.length === 0 ? (
+                    <div className="rounded-xl border border-dashed p-3 text-sm opacity-70">Ainda não há chaves guardadas.</div>
+                  ) : aiSettings.keys.map((key) => (
+                    <div key={key.id} className={`flex flex-wrap items-center gap-2 rounded-xl border px-3 py-2 text-sm ${isDark ? 'border-white/10 bg-slate-900/70' : 'border-[#e7efe2] bg-white'}`}>
+                      <span className="min-w-[95px] font-semibold">{key.provider}</span>
+                      <span className="flex-1 opacity-70">{key.label} · ••••{key.keyLast4}</span>
+                      {editingKeyId === key.id ? (
+                        <>
+                          <input type="password" value={editingKeyValue} onChange={(event) => setEditingKeyValue(event.target.value)} placeholder="nova chave" className={`w-36 rounded-lg border px-2 py-1 text-xs ${isDark ? 'border-white/10 bg-slate-800' : 'border-[#e2ebda] bg-white'}`} />
+                          <button type="button" onClick={() => void saveProviderKey(key)} disabled={!editingKeyValue.trim() || settingsBusy} className="rounded-lg bg-emerald-600 px-2 py-1 text-xs text-white disabled:opacity-50">guardar</button>
+                          <button type="button" onClick={() => { setEditingKeyId(null); setEditingKeyValue(''); }} className="rounded-lg px-2 py-1 text-xs">cancelar</button>
+                        </>
+                      ) : (
+                        <>
+                          <button type="button" onClick={() => void toggleProviderKey(key)} disabled={settingsBusy} className={`rounded-lg px-2 py-1 text-xs ${key.enabled ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-600'}`}>{key.enabled ? 'ligada' : 'desligada'}</button>
+                          <button type="button" onClick={() => { setEditingKeyId(key.id); setEditingKeyValue(''); }} className="rounded-lg px-2 py-1 text-xs">editar</button>
+                          <button type="button" onClick={() => void removeProviderKey(key)} disabled={settingsBusy} className="rounded-lg px-2 py-1 text-xs text-red-700">excluir</button>
+                        </>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+          </div>
         </div>
-      </div>
+      )}
 
       {showNewStoryModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
@@ -1133,7 +1164,7 @@ function Home() {
               <input type="color" value={newStoryColor} onChange={(event) => setNewStoryColor(event.target.value)} className="h-10 w-full rounded-2xl border p-1" />
               <label className="flex items-center gap-2 text-sm">
                 <input type="checkbox" checked={newStoryReadAll} onChange={(event) => setNewStoryReadAll(event.target.checked)} />
-                Querer que a IA leia todas as histórias antes de responder
+                Querer que a IA leia todas as conversas desta história antes de responder
               </label>
             </div>
             <div className="mt-4 flex justify-end gap-2">

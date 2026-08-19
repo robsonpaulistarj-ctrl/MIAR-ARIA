@@ -138,12 +138,70 @@ export function sendRemoteMessage(id: string, input: {
   content: string;
   attachments: RemoteAttachment[];
   useAllHistory: boolean;
+  useAllStoryConversations: boolean;
 }) {
   return request<{
     conversation: RemoteConversation;
     userMessage: RemoteMessage;
     assistantMessage: RemoteMessage;
   }>(`/conversations/${id}/messages`, {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
+export type AiProviderKey = {
+  id: string;
+  provider: string;
+  label: string;
+  keyLast4: string;
+  baseUrl: string;
+  model: string;
+  enabled: boolean;
+  lastUsedAt: string | null;
+  failureCount: number;
+};
+
+export type AiProviderSettings = {
+  activeProvider: string;
+  activeModel: string;
+  keys: AiProviderKey[];
+};
+
+function settingsInit(token: string): RequestInit {
+  return { headers: { 'x-miar-settings-token': token } };
+}
+
+export function getAiProviderSettings(token: string) {
+  return request<AiProviderSettings>('/settings/ai', settingsInit(token));
+}
+
+export function addAiProviderKey(token: string, input: { provider: string; label?: string; key: string; baseUrl?: string; model?: string }) {
+  return request<AiProviderKey>('/settings/ai/keys', {
+    ...settingsInit(token),
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
+export function updateAiProviderKey(token: string, id: string, input: { label?: string; key?: string; baseUrl?: string; model?: string; enabled?: boolean }) {
+  return request<AiProviderKey>(`/settings/ai/keys/${encodeURIComponent(id)}`, {
+    ...settingsInit(token),
+    method: 'PATCH',
+    body: JSON.stringify(input),
+  });
+}
+
+export function deleteAiProviderKey(token: string, id: string) {
+  return request<void>(`/settings/ai/keys/${encodeURIComponent(id)}`, {
+    ...settingsInit(token),
+    method: 'DELETE',
+  });
+}
+
+export function selectAiProvider(token: string, input: { provider: string; model?: string }) {
+  return request<{ activeProvider: string; activeModel: string }>('/settings/ai/select', {
+    ...settingsInit(token),
     method: 'POST',
     body: JSON.stringify(input),
   });

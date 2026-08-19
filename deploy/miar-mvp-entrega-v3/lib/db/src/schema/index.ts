@@ -39,6 +39,44 @@ export const sessionsTable = pgTable(
   (table) => [index('sessions_user_id_idx').on(table.userId)],
 );
 
+export const aiProviderKeysTable = pgTable(
+  'ai_provider_keys',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => usersTable.id, { onDelete: 'cascade' }),
+    provider: text('provider').notNull(),
+    label: text('label').notNull().default('Chave principal'),
+    encryptedKey: text('encrypted_key').notNull(),
+    keyLast4: text('key_last4').notNull().default(''),
+    baseUrl: text('base_url').notNull(),
+    model: text('model').notNull(),
+    enabled: boolean('enabled').notNull().default(true),
+    lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
+    failureCount: integer('failure_count').notNull().default(0),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index('ai_provider_keys_user_id_idx').on(table.userId),
+    index('ai_provider_keys_provider_idx').on(table.provider),
+  ],
+);
+
+export const aiSettingsTable = pgTable(
+  'ai_settings',
+  {
+    userId: uuid('user_id')
+      .primaryKey()
+      .references(() => usersTable.id, { onDelete: 'cascade' }),
+    activeProvider: text('active_provider').notNull().default('gemini'),
+    activeModel: text('active_model').notNull().default('gemini-2.0-flash'),
+    voiceEnabled: boolean('voice_enabled').notNull().default(true),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+);
+
 export const storiesTable = pgTable(
   'stories',
   {
@@ -134,6 +172,8 @@ export const memoriesTable = pgTable(
 
 export const insertUserSchema = createInsertSchema(usersTable).omit({ id: true, createdAt: true });
 export const insertSessionSchema = createInsertSchema(sessionsTable).omit({ id: true, createdAt: true });
+export const insertAiProviderKeySchema = createInsertSchema(aiProviderKeysTable).omit({ id: true, createdAt: true, updatedAt: true, lastUsedAt: true, failureCount: true, keyLast4: true });
+export const insertAiSettingsSchema = createInsertSchema(aiSettingsTable).omit({ updatedAt: true });
 export const insertStorySchema = createInsertSchema(storiesTable).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertConversationSchema = createInsertSchema(conversationsTable).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertMessageSchema = createInsertSchema(messagesTable)
@@ -141,6 +181,8 @@ export const insertMessageSchema = createInsertSchema(messagesTable)
   .extend({ role: z.enum(['user', 'assistant', 'system']) });
 export const insertMemorySchema = createInsertSchema(memoriesTable).omit({ id: true, createdAt: true });
 
+export type AiProviderKey = typeof aiProviderKeysTable.$inferSelect;
+export type AiSettings = typeof aiSettingsTable.$inferSelect;
 export type User = typeof usersTable.$inferSelect;
 export type Session = typeof sessionsTable.$inferSelect;
 export type Story = typeof storiesTable.$inferSelect;
@@ -149,6 +191,8 @@ export type Message = typeof messagesTable.$inferSelect;
 export type Attachment = typeof attachmentsTable.$inferSelect;
 export type Memory = typeof memoriesTable.$inferSelect;
 
+export type InsertAiProviderKey = z.infer<typeof insertAiProviderKeySchema>;
+export type InsertAiSettings = z.infer<typeof insertAiSettingsSchema>;
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type InsertSession = z.infer<typeof insertSessionSchema>;
 export type InsertStory = z.infer<typeof insertStorySchema>;

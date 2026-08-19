@@ -40,6 +40,23 @@ function buildStoryContext(stories: Array<{ id: string; name: string; descriptio
     .join('\\n');
 }
 
+function buildStoryConversationContext(
+  conversations: Array<{ id: string; title: string }>,
+  currentConversationId: string,
+  listMessages: (conversationId: string) => Array<{ role: string; content: string }>,
+) {
+  return conversations
+    .filter((conversation) => conversation.id !== currentConversationId)
+    .map((conversation) => {
+      const messages = listMessages(conversation.id)
+        .map((message) => `${message.role}: ${message.content}`)
+        .join('\\n');
+      return messages ? `### ${conversation.title}\\n${messages}` : '';
+    })
+    .filter(Boolean)
+    .join('\\n\\n');
+}
+
 async function buildVisionImages(userId: string, attachments: Array<{ type: string; key?: string }>): Promise<ChatImage[]> {
   const maxVisionImageBytes = Number(process.env.AI_MAX_IMAGE_BYTES ?? 10 * 1024 * 1024);
   const images: ChatImage[] = [];
@@ -175,8 +192,15 @@ router.post('/conversations/:conversationId/messages', rateLimit({ name: 'ai', w
     const story = memoryGetStory(user.id, conversation.storyId);
     if (!story) throw new ApiError(404, 'Story not found.');
     const history = memoryListMessages(conversation.id);
-    const includeAllStories = input.useAllHistory || story.readAllBeforeAnswer;
-    const storyContext = includeAllStories ? buildStoryContext(memoryListStories(user.id), story.id) : undefined;
+    const includeAllStories = input.useAllHistory;
+    const includeStoryConversations = input.useAllStoryConversations || story.readAllBeforeAnswer;
+    const contextParts = [
+      includeAllStories ? buildStoryContext(memoryListStories(user.id), story.id) : '',
+      includeStoryConversations
+        ? buildStoryConversationContext(memoryListConversations(user.id, story.id), conversation.id, (id) => memoryListMessages(id))
+        : '',
+    ].filter(Boolean);
+    const storyContext = contextParts.length ? contextParts.join('\\n\\n') : undefined;
     const visionImages = await buildVisionImages(user.id, input.attachments);
     const userMessage = memoryCreateMessage({
       conversationId: conversation.id,
@@ -185,6 +209,7 @@ router.post('/conversations/:conversationId/messages', rateLimit({ name: 'ai', w
       attachments: input.attachments,
     });
     const assistantContent = await generateAssistantReply({
+      userId: user.id,
       storyName: story.name,
       storyDescription: story.description,
       storyContext,
@@ -230,15 +255,39 @@ router.post('/conversations/:conversationId/messages', rateLimit({ name: 'ai', w
     .from(messagesTable)
     .where(eq(messagesTable.conversationId, current.conversation.id))
     .orderBy(asc(messagesTable.createdAt));
-  const includeAllStories = input.useAllHistory || current.story.readAllBeforeAnswer;
-  const allStories = includeAllStories
-    ? await database
+  const includeAllStories = input.useAllHistory;
+  const includeStoryConversations = input.useAllStoryConversations || current.story.readAllBeforeAnswer;
+  const contextParts: string[] = [];
+  if (includeAllStories) {
+    const allStories = await database
       .select({ id: storiesTable.id, name: storiesTable.name, description: storiesTable.description })
       .from(storiesTable)
       .where(eq(storiesTable.userId, user.id))
-      .orderBy(asc(storiesTable.createdAt))
-    : [];
-  const storyContext = includeAllStories ? buildStoryContext(allStories, current.story.id) : undefined;
+      .orderBy(asc(storiesTable.createdAt));
+    const allStoriesContext = buildStoryContext(allStories, current.story.id);
+    if (allStoriesContext) contextParts.push(allStoriesContext);
+  }
+  if (includeStoryConversations) {
+    const storyConversations = await database
+      .select({ id: conversationsTable.id, title: conversationsTable.title })
+      .from(conversationsTable)
+      .where(and(eq(conversationsTable.userId, user.id), eq(conversationsTable.storyId, current.story.id)))
+      .orderBy(asc(conversationsTable.createdAt));
+    const conversationParts: string[] = [];
+    for (const storyConversation of storyConversations) {
+      if (storyConversation.id === current.conversation.id) continue;
+      const previousMessages = await database
+        .select({ role: messagesTable.role, content: messagesTable.content })
+        .from(messagesTable)
+        .where(eq(messagesTable.conversationId, storyConversation.id))
+        .orderBy(asc(messagesTable.createdAt));
+      if (previousMessages.length) {
+        conversationParts.push(`### ${storyConversation.title}\\n${previousMessages.map((message) => `${message.role}: ${message.content}`).join('\\n')}`);
+      }
+    }
+    if (conversationParts.length) contextParts.push(conversationParts.join('\\n\\n'));
+  }
+  const storyContext = contextParts.length ? contextParts.join('\\n\\n') : undefined;
   const visionImages = await buildVisionImages(user.id, input.attachments);
   const userMessage = await database
     .insert(messagesTable)
@@ -251,6 +300,7 @@ router.post('/conversations/:conversationId/messages', rateLimit({ name: 'ai', w
     .returning();
   if (!userMessage[0]) throw new ApiError(500, 'Could not save user message.');
   const assistantContent = await generateAssistantReply({
+    userId: user.id,
     storyName: current.story.name,
     storyDescription: current.story.description,
     storyContext,
